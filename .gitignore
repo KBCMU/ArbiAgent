@@ -49,3 +49,8 @@ token.json
 # Build
 *.pyc
 .cache/
+
+# Rust
+target/
+C:\cargo-target/
+*.pdb
