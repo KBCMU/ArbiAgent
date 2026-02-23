@@ -64,3 +64,10 @@ web-artifacts-builder/
 
 # Test files
 backend-rust/test_*.rs
+backend-rust/*.json
+
+# Misc
+SKILL_FRONTEND.md
+execution/
+.tmp/
+.cursor/
