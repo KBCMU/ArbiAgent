@@ -1,0 +1,182 @@
+﻿[
+    {
+        "id":  "nba-den-gsw-2026-02-22",
+        "event_title":  "NBA: DEN vs GSW (2026-02-22)",
+        "kalshi":  {
+                       "outcomes":  {
+                                        "DEN":  {
+                                                    "no_price":  0.455,
+                                                    "yes_price":  0.545
+                                                },
+                                        "GSW":  {
+                                                    "no_price":  0.55,
+                                                    "yes_price":  0.45
+                                                }
+                                    },
+                       "updated_at":  "2026-02-22T21:42:37.714507900+00:00"
+                   },
+        "polymarket":  {
+                           "outcomes":  {
+                                            "DEN":  {
+                                                        "no_price":  0.48,
+                                                        "yes_price":  0.52
+                                                    },
+                                            "GSW":  {
+                                                        "no_price":  0.53,
+                                                        "yes_price":  0.47
+                                                    }
+                                        },
+                           "updated_at":  "2026-02-22T21:42:37.714507900+00:00"
+                       }
+    },
+    {
+        "id":  "nba-phi-min-2026-02-22",
+        "event_title":  "NBA: PHI vs MIN (2026-02-22)",
+        "kalshi":  {
+                       "outcomes":  {
+                                        "MIN":  {
+                                                    "no_price":  0.245,
+                                                    "yes_price":  0.755
+                                                },
+                                        "PHI":  {
+                                                    "no_price":  0.755,
+                                                    "yes_price":  0.245
+                                                }
+                                    },
+                       "updated_at":  "2026-02-22T21:42:37.957535700+00:00"
+                   },
+        "polymarket":  {
+                           "outcomes":  {
+                                            "MIN":  {
+                                                        "no_price":  0.76,
+                                                        "yes_price":  0.24
+                                                    },
+                                            "PHI":  {
+                                                        "no_price":  0.25,
+                                                        "yes_price":  0.75
+                                                    }
+                                        },
+                           "updated_at":  "2026-02-22T21:42:37.957535700+00:00"
+                       }
+    },
+    {
+        "id":  "nba-por-phx-2026-02-22",
+        "event_title":  "NBA: POR vs PHX (2026-02-22)",
+        "kalshi":  {
+                       "outcomes":  {
+                                        "PHX":  {
+                                                    "no_price":  0.595,
+                                                    "yes_price":  0.405
+                                                },
+                                        "POR":  {
+                                                    "no_price":  0.41000000000000003,
+                                                    "yes_price":  0.59
+                                                }
+                                    },
+                       "updated_at":  "2026-02-22T21:42:37.716485900+00:00"
+                   },
+        "polymarket":  {
+                           "outcomes":  {
+                                            "PHX":  {
+                                                        "no_price":  0.42000000000000004,
+                                                        "yes_price":  0.58
+                                                    },
+                                            "POR":  {
+                                                        "no_price":  0.6,
+                                                        "yes_price":  0.4
+                                                    }
+                                        },
+                           "updated_at":  "2026-02-22T21:42:37.716485900+00:00"
+                       }
+    },
+    {
+        "id":  "nba-dal-ind-2026-02-22",
+        "event_title":  "NBA: DAL vs IND (2026-02-22)",
+        "kalshi":  {
+                       "outcomes":  {
+                                        "DAL":  {
+                                                    "no_price":  0.485,
+                                                    "yes_price":  0.515
+                                                },
+                                        "IND":  {
+                                                    "no_price":  0.515,
+                                                    "yes_price":  0.485
+                                                }
+                                    },
+                       "updated_at":  "2026-02-22T21:42:37.714046100+00:00"
+                   },
+        "polymarket":  {
+                           "outcomes":  {
+                                            "DAL":  {
+                                                        "no_price":  0.48,
+                                                        "yes_price":  0.52
+                                                    },
+                                            "IND":  {
+                                                        "no_price":  0.53,
+                                                        "yes_price":  0.47
+                                                    }
+                                        },
+                           "updated_at":  "2026-02-22T21:42:37.714046100+00:00"
+                       }
+    },
+    {
+        "id":  "nba-nyk-chi-2026-02-22",
+        "event_title":  "NBA: NYK vs CHI (2026-02-22)",
+        "kalshi":  {
+                       "outcomes":  {
+                                        "CHI":  {
+                                                    "no_price":  0.795,
+                                                    "yes_price":  0.20500000000000002
+                                                },
+                                        "NYK":  {
+                                                    "no_price":  0.195,
+                                                    "yes_price":  0.805
+                                                }
+                                    },
+                       "updated_at":  "2026-02-22T21:42:37.958141100+00:00"
+                   },
+        "polymarket":  {
+                           "outcomes":  {
+                                            "CHI":  {
+                                                        "no_price":  0.81,
+                                                        "yes_price":  0.19
+                                                    },
+                                            "NYK":  {
+                                                        "no_price":  0.19999999999999996,
+                                                        "yes_price":  0.8
+                                                    }
+                                        },
+                           "updated_at":  "2026-02-22T21:42:37.958141100+00:00"
+                       }
+    },
+    {
+        "id":  "nba-orl-lac-2026-02-22",
+        "event_title":  "NBA: ORL vs LAC (2026-02-22)",
+        "kalshi":  {
+                       "outcomes":  {
+                                        "LAC":  {
+                                                    "no_price":  0.475,
+                                                    "yes_price":  0.525
+                                                },
+                                        "ORL":  {
+                                                    "no_price":  0.525,
+                                                    "yes_price":  0.475
+                                                }
+                                    },
+                       "updated_at":  "2026-02-22T21:42:37.715417400+00:00"
+                   },
+        "polymarket":  {
+                           "outcomes":  {
+                                            "LAC":  {
+                                                        "no_price":  0.48,
+                                                        "yes_price":  0.52
+                                                    },
+                                            "ORL":  {
+                                                        "no_price":  0.53,
+                                                        "yes_price":  0.47
+                                                    }
+                                        },
+                           "updated_at":  "2026-02-22T21:42:37.715417400+00:00"
+                       }
+    }
+]

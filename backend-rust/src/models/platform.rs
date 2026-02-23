@@ -112,6 +112,43 @@ pub struct PolymarketPagination {
     pub pagination_key: Option<String>,
 }
 
+// ─── Kalshi Direct API Response Types ───────────────────────────────
+// Used by the direct batch price fetcher (ingestion/direct_api.rs).
+// These map to https://api.elections.kalshi.com/trade-api/v2/markets
+
+/// Wrapper for `GET /markets` on Kalshi's public API.
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
+pub struct KalshiDirectMarketsResponse {
+    pub markets: Vec<KalshiDirectMarket>,
+    pub cursor: Option<String>,
+}
+
+/// A single market from Kalshi's public `GET /markets` endpoint.
+///
+/// Prices use the new FixedPointDollars format (string like "0.5600").
+/// We deserialize them as `Option<String>` and parse to f64 in application code.
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
+pub struct KalshiDirectMarket {
+    pub ticker: String,
+    pub event_ticker: Option<String>,
+    /// Market lifecycle status: "active", "closed", "determined", "finalized", etc.
+    pub status: Option<String>,
+    /// Settlement result: "yes", "no", "" (empty until determined).
+    pub result: Option<String>,
+    /// Prices in FixedPointDollars (e.g. "0.5600" = $0.56).
+    pub yes_bid_dollars: Option<String>,
+    pub yes_ask_dollars: Option<String>,
+    pub no_bid_dollars: Option<String>,
+    pub no_ask_dollars: Option<String>,
+    pub last_price_dollars: Option<String>,
+    /// Open interest (string, e.g. "150.00")
+    pub open_interest_fp: Option<String>,
+    /// 24h volume (string, e.g. "500.00")
+    pub volume_24h_fp: Option<String>,
+}
+
 // ─── API Response Types (our endpoints) ────────────────────────────
 
 /// Serialized event for the frontend.
@@ -121,6 +158,7 @@ pub struct EventResponse {
     pub sport: String,
     pub event_title: String,
     pub game_start_time: Option<String>,
+    pub created_at: String,
     pub status: String,
     pub kalshi: Option<PlatformOddsResponse>,
     pub polymarket: Option<PlatformOddsResponse>,

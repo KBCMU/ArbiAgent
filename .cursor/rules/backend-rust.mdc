@@ -1,0 +1,28 @@
+---
+description: Rust backend conventions for ArbiAgent
+globs: backend-rust/**/*.rs
+alwaysApply: false
+---
+
+# Rust Backend Conventions
+
+## Stack
+
+- Actix-web for HTTP, Tokio async runtime
+- Serde for serialization, reqwest for HTTP clients
+- Supabase (Postgres) for persistence, in-memory cache for hot data
+
+## Structure
+
+- `src/main.rs` — server bootstrap and scheduler
+- `src/api/routes.rs` — REST endpoints under `/api/v2/`
+- `src/ingestion/` — platform pollers (Kalshi, Polymarket, Culture, Dome)
+- `src/processing/arb_detector.rs` — arbitrage detection logic
+- `src/storage/` — Supabase client and in-memory cache
+- `src/models/` — shared data types (Event, Platform enums)
+
+## API Design
+
+- All responses are JSON, snake_case fields
+- Prices are floats 0.0-1.0 (frontend converts to cents)
+- Events have `kalshi` and `polymarket` platform odds blocks with `outcomes: Record<string, { yes_price, no_price }>`

@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tracing::{error, info, warn};
@@ -298,17 +300,30 @@ impl SupabaseClient {
 }
 
 /// Periodically writes odds snapshots from the in-memory cache to Supabase.
+///
+/// Tracks `updated_at` per event so only events whose odds have changed since
+/// the last snapshot cycle are written, avoiding redundant DB inserts.
 pub async fn run_snapshot_writer(state: Arc<AppState>) {
     let interval = tokio::time::Duration::from_secs(state.config.snapshot_write_interval_secs);
+    let mut last_snapshot_at: HashMap<String, DateTime<Utc>> = HashMap::new();
 
     loop {
         tokio::time::sleep(interval).await;
 
         let events_with_odds = state.cache.get_all_events_with_odds();
         let mut written = 0u32;
+        let mut skipped = 0u32;
 
         for (event, odds_opt) in &events_with_odds {
             if let Some(odds) = odds_opt {
+                // Skip events whose odds haven't changed since last snapshot
+                if let Some(&prev_ts) = last_snapshot_at.get(&event.id) {
+                    if odds.updated_at <= prev_ts {
+                        skipped += 1;
+                        continue;
+                    }
+                }
+
                 for (platform, outcomes) in &odds.platform_odds {
                     for (outcome, price) in outcomes {
                         if let Err(e) = state
@@ -332,11 +347,16 @@ pub async fn run_snapshot_writer(state: Arc<AppState>) {
                         }
                     }
                 }
+
+                last_snapshot_at.insert(event.id.clone(), Utc::now());
             }
         }
 
-        if written > 0 {
-            info!("📸 Wrote {} odds snapshots to Supabase", written);
+        if written > 0 || skipped > 0 {
+            info!(
+                "📸 Wrote {} odds snapshots to Supabase ({} events unchanged, skipped)",
+                written, skipped
+            );
         }
     }
 }

@@ -52,8 +52,9 @@ struct PolyBookLevel {
 pub async fn run_polymarket_ws_ingester(state: Arc<AppState>) {
     info!("🔌 Polymarket WebSocket ingester starting...");
 
-    // Wait for event discovery to populate cache first
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    // Wait for DomeAPI event discovery to populate cache first.
+    // Discovery makes ~24 rate-limited requests (~26s) — 40s gives headroom.
+    tokio::time::sleep(Duration::from_secs(40)).await;
 
     let mut backoff_secs = 1u64;
     let max_backoff = 60u64;
@@ -203,12 +204,29 @@ fn process_polymarket_message(msg: PolyWsMessage, state: &AppState) -> anyhow::R
         None => return Ok(()), // Token not in any tracked event
     };
 
-    // Determine the outcome name from the token index
+    // Determine the outcome name from the token index.
+    // Prefer pre-resolved Polymarket labels from discovery; this preserves
+    // token->outcome side alignment and avoids YES/NO inversion bugs.
     let outcome = {
         let event = state.cache.events.get(&event_id);
         match event {
             Some(e) => {
-                if let Some(kalshi_ticker) =
+                if let Some(label) = e
+                    .value()
+                    .platform_ids
+                    .polymarket_outcome_labels
+                    .get(token_index)
+                {
+                    if !label.is_empty() {
+                        label.clone()
+                    } else if let Some(kalshi_ticker) =
+                        e.value().platform_ids.kalshi_market_tickers.get(token_index)
+                    {
+                        crate::ingestion::dome_poller::extract_kalshi_outcome_pub(kalshi_ticker)
+                    } else {
+                        format!("OUTCOME_{}", token_index)
+                    }
+                } else if let Some(kalshi_ticker) =
                     e.value().platform_ids.kalshi_market_tickers.get(token_index)
                 {
                     crate::ingestion::dome_poller::extract_kalshi_outcome_pub(kalshi_ticker)

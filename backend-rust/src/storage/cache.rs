@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::models::{
     arb::ArbitrageOpportunity,
-    event::{CanonicalEvent, EventOdds, OutcomePrice},
+    event::{is_event_past, CanonicalEvent, EventOdds, OutcomePrice},
 };
 
 /// Thread-safe in-memory cache for real-time state.
@@ -111,5 +111,49 @@ impl StateCache {
             .iter()
             .filter(|entry| entry.value().platform_odds.len() >= 2)
             .count()
+    }
+
+    /// Remove stale events (past date or settled/closed status) from all cache maps.
+    ///
+    /// Also removes events with no odds update in the last `stale_hours` hours,
+    /// which catches orphaned entries from failed discovery cycles.
+    ///
+    /// Returns the count of evicted events.
+    pub fn evict_stale_events(&self, stale_hours: i64) -> usize {
+        let cutoff = Utc::now() - chrono::Duration::hours(stale_hours);
+        let mut evicted = 0usize;
+
+        let stale_ids: Vec<String> = self
+            .events
+            .iter()
+            .filter(|entry| {
+                let event = entry.value();
+                // Past date
+                if is_event_past(&event.id) {
+                    return true;
+                }
+                // Settled or closed by platform lifecycle
+                if event.status == "settled" || event.status == "closed" {
+                    return true;
+                }
+                // No odds update for `stale_hours` — likely orphaned
+                if let Some(odds) = self.odds.get(&event.id) {
+                    if odds.updated_at < cutoff {
+                        return true;
+                    }
+                }
+                false
+            })
+            .map(|entry| entry.key().clone())
+            .collect();
+
+        for id in &stale_ids {
+            self.events.remove(id);
+            self.odds.remove(id);
+            self.active_arbs.remove(id);
+            evicted += 1;
+        }
+
+        evicted
     }
 }

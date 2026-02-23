@@ -8,6 +8,7 @@ use axum::{
 };
 use serde::Deserialize;
 
+use crate::models::event::{is_event_past, is_event_settled_full};
 use crate::models::platform::{
     ArbOpportunityResponse, EventResponse, OutcomePriceResponse, PlatformOddsResponse,
 };
@@ -61,7 +62,17 @@ async fn list_events(
 
     let mut responses: Vec<EventResponse> = events_with_odds
         .into_iter()
-        .filter(|(event, _)| {
+        .filter(|(event, odds_opt)| {
+            // Skip events whose game date has already passed
+            if is_event_past(&event.id) {
+                return false;
+            }
+            // Skip events whose markets have settled (status or price heuristic)
+            if let Some(odds) = odds_opt {
+                if is_event_settled_full(&event.status, odds) {
+                    return false;
+                }
+            }
             // Filter by sport
             if let Some(ref sport) = params.sport {
                 if event.sport.as_str() != sport.as_str() {
@@ -110,7 +121,26 @@ async fn get_event(
 }
 
 async fn list_arbitrage(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
-    let arbs = state.cache.get_all_active_arbs();
+    let arbs: Vec<_> = state
+        .cache
+        .get_all_active_arbs()
+        .into_iter()
+        .filter(|arb| {
+            // Skip events whose game date has already passed
+            if is_event_past(&arb.canonical_event_id) {
+                return false;
+            }
+            // Skip events whose markets have settled (status or price heuristic)
+            if let Some((event, Some(odds))) =
+                state.cache.get_event_with_odds(&arb.canonical_event_id)
+            {
+                if is_event_settled_full(&event.status, &odds) {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
     Json(serde_json::json!({
         "opportunities": arbs,
         "total": arbs.len(),
@@ -204,6 +234,7 @@ fn build_event_response(
         sport: event.sport.as_str().to_string(),
         event_title: event.event_title.clone(),
         game_start_time: event.game_start_time.map(|t| t.to_rfc3339()),
+        created_at: event.created_at.to_rfc3339(),
         status: event.status.clone(),
         kalshi,
         polymarket,

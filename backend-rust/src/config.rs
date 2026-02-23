@@ -25,6 +25,10 @@ pub struct AppConfig {
     pub arb_min_margin_pct: f64,
     pub arb_min_profit_usd: f64,
 
+    // Trading fees (percentage of contract value)
+    pub kalshi_fee_pct: f64,
+    pub polymarket_fee_pct: f64,
+
     // Kalshi direct API (for WebSocket)
     pub kalshi_email: String,
     pub kalshi_password: String,
@@ -32,6 +36,9 @@ pub struct AppConfig {
     // Feature flags
     pub enable_kalshi_ws: bool,
     pub enable_polymarket_ws: bool,
+    /// Use direct Kalshi/Polymarket batch APIs for price fetching instead of DomeAPI.
+    /// Default: true. Set to false to fall back to the old DomeAPI-based price loop.
+    pub enable_direct_price_api: bool,
 }
 
 impl AppConfig {
@@ -95,6 +102,15 @@ impl AppConfig {
                 .parse()
                 .unwrap_or(0.50),
 
+            kalshi_fee_pct: std::env::var("KALSHI_FEE_PCT")
+                .unwrap_or_else(|_| "3.0".to_string())
+                .parse()
+                .unwrap_or(3.0),
+            polymarket_fee_pct: std::env::var("POLYMARKET_FEE_PCT")
+                .unwrap_or_else(|_| "0.0".to_string())
+                .parse()
+                .unwrap_or(0.0),
+
             kalshi_email: std::env::var("KALSHI_EMAIL").unwrap_or_default(),
             kalshi_password: std::env::var("KALSHI_PASSWORD").unwrap_or_default(),
 
@@ -103,9 +119,14 @@ impl AppConfig {
                 .parse()
                 .unwrap_or(false),
             enable_polymarket_ws: std::env::var("ENABLE_POLYMARKET_WS")
-                .unwrap_or_else(|_| "false".to_string())
+                .unwrap_or_else(|_| "true".to_string())
                 .parse()
-                .unwrap_or(false),
+                .unwrap_or(true),
+
+            enable_direct_price_api: std::env::var("ENABLE_DIRECT_PRICE_API")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .unwrap_or(true),
         })
     }
 }

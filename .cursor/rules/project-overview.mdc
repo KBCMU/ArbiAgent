@@ -1,0 +1,31 @@
+---
+description: ArbiAgent project architecture and conventions
+alwaysApply: true
+---
+
+# ArbiAgent — Project Overview
+
+ArbiAgent scans for arbitrage opportunities across prediction markets (Kalshi, Polymarket). It consists of three layers:
+
+## Architecture
+
+- **Backend (Rust)**: `backend-rust/` — Ingestion, arb detection, REST API at `:8080`
+- **Frontend (Next.js)**: `frontend/` — App Router, React 19, Tailwind CSS 4, TypeScript
+- **Orchestration**: `directives/` for SOPs, `execution/` for deterministic scripts
+
+## Key API Contract
+
+The Rust backend serves `/api/v2/events` returning `MatchedEvent` objects with `kalshi_outcomes` and `polymarket_outcomes` arrays of `OutcomeOdds { outcome, yes_price, no_price }` (prices in 0-1 floats, converted to cents 0-100 on the frontend).
+
+## Brand Colors
+
+- Kalshi: `#7138cc` (purple)
+- Polymarket: `#0c9aa7` (cyan)
+- Arbitrage: `#367c53` (emerald)
+- App brand: `var(--purple-brand)` / `#6d28d9`
+
+## Platform Logos
+
+- Kalshi: `/kalshi-logo-v2.png` (primary), `/kalshi-logo.png` (alternate)
+- Polymarket: `/polymarket-logo.png` (primary)
+- Do NOT use the SVG logo placeholders (`kalshi-logo.svg`, `polymarket-logo.svg`) — these are generic stubs, not real brand assets.

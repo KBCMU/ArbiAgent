@@ -54,3 +54,13 @@ token.json
 target/
 C:\cargo-target/
 *.pdb
+
+# Agent / Skills
+.agent/
+directives/
+skill-creator/
+web-artifacts-builder/
+.gemini/
+
+# Test files
+backend-rust/test_*.rs

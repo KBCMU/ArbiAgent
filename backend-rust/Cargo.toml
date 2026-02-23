@@ -31,6 +31,7 @@ dashmap = "6"
 
 # Date/time
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
 
 # Environment config
 dotenvy = "0.15"

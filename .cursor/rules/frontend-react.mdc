@@ -1,0 +1,35 @@
+---
+description: Frontend React/Next.js conventions for ArbiAgent
+globs: frontend/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend Conventions
+
+## Stack
+
+- Next.js 16 App Router, React 19, TypeScript strict, Tailwind CSS 4
+- Icons: `lucide-react`. Images: `next/image`.
+- State: React hooks only (no external state library)
+- Styling: Tailwind utility classes + CSS variables from `globals.css`
+
+## Patterns
+
+- All components use `"use client"` when they need interactivity
+- Path alias: `@/*` maps to `frontend/*`
+- Utility: `cn()` from `@/lib/utils` for conditional class merging (clsx + tailwind-merge)
+- API layer in `@/lib/api.ts` — transforms Rust responses into typed frontend models
+
+## Component Structure
+
+- `app/markets/page.tsx` — main markets page, owns view toggle (card/row)
+- `components/EventTable.tsx` — switches between `EventCard` (grid) and `EventRow` (table)
+- `components/EventCard.tsx` — card view with per-platform sections
+- `components/EventRow.tsx` — table row view with price cells
+
+## Style Guidelines
+
+- Dark mode support via `dark:` variants throughout
+- Tabular numbers (`tabular-nums`) for all price displays
+- Platform logos: use PNG versions with `next/image`, Polymarket gets `rounded-full`, Kalshi gets `rounded`
+- Consistent yes/no indicators: green for YES, red for NO

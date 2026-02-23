@@ -1,0 +1,46 @@
+﻿[
+    {
+        "event_title":  "CBB: AMERCN vs LAFAY (2026-02-22)",
+        "kalshi":  null,
+        "polymarket":  null
+    },
+    {
+        "event_title":  "CBB: HOU vs KAN (2026-02-23)",
+        "kalshi":  null,
+        "polymarket":  null
+    },
+    {
+        "event_title":  "CBB: IOWA vs WISC (2026-02-22)",
+        "kalshi":  {
+                       "outcomes":  {
+                                        "IOWA":  {
+                                                     "no_price":  0.59,
+                                                     "yes_price":  0.41000000000000003
+                                                 },
+                                        "WIS":  {
+                                                    "no_price":  0.41000000000000003,
+                                                    "yes_price":  0.59
+                                                }
+                                    },
+                       "updated_at":  "2026-02-22T21:37:31.956733+00:00"
+                   },
+        "polymarket":  {
+                           "outcomes":  {
+                                            "IOWA":  {
+                                                         "no_price":  0.6,
+                                                         "yes_price":  0.4
+                                                     },
+                                            "WIS":  {
+                                                        "no_price":  0.42000000000000004,
+                                                        "yes_price":  0.58
+                                                    }
+                                        },
+                           "updated_at":  "2026-02-22T21:37:31.956733+00:00"
+                       }
+    },
+    {
+        "event_title":  "CBB: NO vs SFAUS (2026-02-23)",
+        "kalshi":  null,
+        "polymarket":  null
+    }
+]
