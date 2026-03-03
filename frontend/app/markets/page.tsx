@@ -86,7 +86,7 @@ export default function MarketsPage() {
         }
 
         return result;
-    }, [allEvents, activeCategory, searchQuery]);
+    }, [allEvents, activeCategory, activeSubCategory, searchQuery]);
 
     return (
         <div className="flex min-h-screen" style={{ background: 'var(--bg-main)' }}>

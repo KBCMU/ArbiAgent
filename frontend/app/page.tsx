@@ -1,13 +1,17 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { TrendingUp, ArrowRight, Sparkles } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
 export default function LandingPage() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => { setReady(true); }, []);
+
   return (
-    <div className="landing-page">
+    <div className="landing-page" style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.15s ease-in' }}>
       {/* Background Effects */}
       <div className="bg-effects">
         <div className="gradient-orb gradient-orb-1" />
