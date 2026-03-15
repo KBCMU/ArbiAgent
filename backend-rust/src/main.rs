@@ -7,6 +7,7 @@ use tracing::info;
 mod api;
 mod config;
 mod ingestion;
+mod matching;
 mod models;
 mod processing;
 mod storage;
@@ -37,6 +38,7 @@ async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
     let config = AppConfig::from_env()?;
     info!("🚀 ArbiAgent Backend v{}", env!("CARGO_PKG_VERSION"));
+    info!("📡 Native matching: {}", config.enable_native_matching);
     info!("📡 DomeAPI configured: {}", !config.dome_api_key.is_empty());
     info!("🗄️  Supabase configured: {}", !config.supabase_url.is_empty());
 
@@ -60,11 +62,29 @@ async fn main() -> Result<()> {
 
     // ── Background Tasks ────────────────────────────────────────────
 
-    // Event discovery (DomeAPI matching-markets endpoint)
-    let poller_state = Arc::clone(&state);
-    tokio::spawn(async move {
-        ingestion::dome_poller::run_event_discovery_loop(poller_state).await;
-    });
+    // Event discovery — native matching (default) or DomeAPI fallback
+    if config.enable_native_matching {
+        let matching_state = Arc::clone(&state);
+        tokio::spawn(async move {
+            matching::run_sports_matching_loop(matching_state).await;
+        });
+        info!("🔍 Event discovery: native matching engine");
+
+        // Shadow mode: also run DomeAPI for comparison logging
+        if config.enable_shadow_matching && !config.dome_api_key.is_empty() {
+            let shadow_state = Arc::clone(&state);
+            tokio::spawn(async move {
+                matching::shadow::run_shadow_comparison_loop(shadow_state).await;
+            });
+            info!("👥 Shadow matching: DomeAPI running in parallel for comparison");
+        }
+    } else {
+        let poller_state = Arc::clone(&state);
+        tokio::spawn(async move {
+            ingestion::dome_poller::run_event_discovery_loop(poller_state).await;
+        });
+        info!("🔍 Event discovery: DomeAPI (legacy)");
+    }
 
     // Price refresh — direct batch APIs (default) or DomeAPI fallback
     if config.enable_direct_price_api {

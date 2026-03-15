@@ -1,9 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 /// Application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
 pub struct AppConfig {
-    // DomeAPI
+    // DomeAPI (optional when native matching is enabled)
     pub dome_api_key: String,
     pub dome_api_base_url: String,
 
@@ -39,6 +39,15 @@ pub struct AppConfig {
     /// Use direct Kalshi/Polymarket batch APIs for price fetching instead of DomeAPI.
     /// Default: true. Set to false to fall back to the old DomeAPI-based price loop.
     pub enable_direct_price_api: bool,
+
+    // Native matching
+    /// Use the native matching engine instead of DomeAPI for sports event discovery.
+    /// Default: true. Set to false to use DomeAPI (requires DOME_API_KEY).
+    pub enable_native_matching: bool,
+    /// Minimum score (0-100) to accept a cross-platform match.
+    pub match_min_score: f64,
+    /// Run both DomeAPI and native matching in parallel for comparison logging.
+    pub enable_shadow_matching: bool,
 }
 
 impl AppConfig {
@@ -64,9 +73,21 @@ impl AppConfig {
             explicit_db_url
         };
 
+        let enable_native_matching: bool = std::env::var("ENABLE_NATIVE_MATCHING")
+            .unwrap_or_else(|_| "true".to_string())
+            .parse()
+            .unwrap_or(true);
+
+        // DOME_API_KEY is only required when native matching is disabled
+        let dome_api_key = std::env::var("DOME_API_KEY").unwrap_or_default();
+        if !enable_native_matching && dome_api_key.is_empty() {
+            anyhow::bail!(
+                "DOME_API_KEY must be set when ENABLE_NATIVE_MATCHING=false"
+            );
+        }
+
         Ok(AppConfig {
-            dome_api_key: std::env::var("DOME_API_KEY")
-                .context("DOME_API_KEY must be set")?,
+            dome_api_key,
             dome_api_base_url: std::env::var("DOME_API_BASE_URL")
                 .unwrap_or_else(|_| "https://api.domeapi.io/v1".to_string()),
 
@@ -127,6 +148,16 @@ impl AppConfig {
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
                 .unwrap_or(true),
+
+            enable_native_matching,
+            match_min_score: std::env::var("MATCH_MIN_SCORE")
+                .unwrap_or_else(|_| "60.0".to_string())
+                .parse()
+                .unwrap_or(60.0),
+            enable_shadow_matching: std::env::var("ENABLE_SHADOW_MATCHING")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
         })
     }
 }
