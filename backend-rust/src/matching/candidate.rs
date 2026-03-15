@@ -124,11 +124,14 @@ pub fn extract_teams_from_kalshi_tickers(market_tickers: &[String]) -> (Option<S
 
 /// Extract team names from a title like "Los Angeles Lakers vs Boston Celtics"
 /// or "NBA: LAL vs BOS (2025-03-14)" using the team dictionary.
+///
+/// Also handles Polymarket-style titles like "Will the Lakers beat the Celtics?"
+/// by recognizing "beat", "defeat", "over", "cover" as team separators.
 pub fn extract_teams_from_title(title: &str, sport: Sport) -> (Option<String>, Option<String>) {
     let lower = title.to_lowercase();
 
-    // Split on "vs", "v.", "at", "@" to get the two sides
-    let separators = ["vs.", "vs", "v.", " at ", " @ "];
+    // Split on "vs", "v.", "at", "@", or Polymarket-style separators
+    let separators = ["vs.", "vs", "v.", " at ", " @ ", " beat ", " beats ", " defeat ", " defeats ", " over "];
     for sep in separators {
         if let Some(idx) = lower.find(sep) {
             let left = &title[..idx].trim();

@@ -83,6 +83,16 @@ impl StateCache {
         })
     }
 
+    /// Clear all odds for a specific platform on an event.
+    ///
+    /// Used when outcome labels are re-resolved (e.g. "Yes"/"No" → "LAL"/"BOS") to
+    /// prevent stale generic keys from accumulating alongside the new real labels.
+    pub fn clear_platform_odds(&self, event_id: &str, platform: &str) {
+        if let Some(mut entry) = self.odds.get_mut(event_id) {
+            entry.platform_odds.remove(platform);
+        }
+    }
+
     /// Store active arb opportunities for an event.
     pub fn set_active_arbs(&self, event_id: &str, arbs: Vec<ArbitrageOpportunity>) {
         if arbs.is_empty() {
