@@ -63,6 +63,17 @@ async fn list_events(
     let mut responses: Vec<EventResponse> = events_with_odds
         .into_iter()
         .filter(|(event, odds_opt)| {
+            // Only show binary (2-outcome) events — excludes championship/futures markets
+            // with many outcomes (e.g. "2026 NBA Champion"). The outcome count is the
+            // number of Kalshi market tickers when present, otherwise Polymarket token IDs.
+            let outcome_count = if !event.platform_ids.kalshi_market_tickers.is_empty() {
+                event.platform_ids.kalshi_market_tickers.len()
+            } else {
+                event.platform_ids.polymarket_token_ids.len()
+            };
+            if outcome_count != 2 {
+                return false;
+            }
             // Skip events whose game date has already passed
             if is_event_past(&event.id) {
                 return false;
