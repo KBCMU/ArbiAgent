@@ -379,10 +379,11 @@ fn build_event_id(kalshi: &CandidateEvent, poly: &CandidateEvent) -> String {
     let team_a = teams[0].clone();
     let team_b = teams[1].clone();
 
-    // Prefer Kalshi date (extracted from ticker, more reliable)
-    let date = kalshi
+    // Prefer Polymarket date (slug/date fields are often game-day aligned),
+    // then fall back to Kalshi ticker date.
+    let date = poly
         .game_date
-        .or(poly.game_date)
+        .or(kalshi.game_date)
         .map(|d| d.format("%Y-%m-%d").to_string())
         .unwrap_or_else(|| "nodate".to_string());
 
@@ -574,6 +575,19 @@ mod tests {
         let id_forward = build_event_id(&k, &p_forward);
         let id_reversed = build_event_id(&k, &p_reversed);
         assert_eq!(id_forward, id_reversed, "Event ID must not depend on team order");
+    }
+
+    #[test]
+    fn test_event_id_prefers_polymarket_date() {
+        let kalshi_date = NaiveDate::from_ymd_opt(2026, 3, 15);
+        let poly_date = NaiveDate::from_ymd_opt(2026, 3, 16);
+        let k = make_kalshi("NBA: LAL vs BOS", Sport::Nba, kalshi_date, Some("LAL"), Some("BOS"),
+            vec!["KXNBAGAME-26MAR15LALBOS-LAL", "KXNBAGAME-26MAR15LALBOS-BOS"]);
+        let p = make_poly("Lakers vs Celtics", Sport::Nba, poly_date,
+            Some("LAL"), Some("BOS"), "nba-lal-bos-2026-03-16");
+
+        let id = build_event_id(&k, &p);
+        assert_eq!(id, "nba-bos-lal-2026-03-16");
     }
 
     #[test]

@@ -16,6 +16,7 @@ interface EventRowProps {
 }
 
 const DATE_REGEX = /\((\d{4}-\d{2}-\d{2})\)/;
+const EVENT_ID_DATE_REGEX = /(\d{4}-\d{2}-\d{2})$/;
 
 function extractDate(event: MatchedEvent): string {
     if (event.game_start_time) {
@@ -33,6 +34,14 @@ function extractDate(event: MatchedEvent): string {
     const match = event.event_title.match(DATE_REGEX);
     if (match) {
         const d = new Date(match[1] + "T00:00:00");
+        return `${d.getMonth() + 1}/${d.getDate()}`;
+    }
+
+    // Sports IDs are canonicalized as `sport-team-team-YYYY-MM-DD`.
+    // Prefer this over created_at when no explicit start time is available.
+    const idDateMatch = event.id.match(EVENT_ID_DATE_REGEX);
+    if (idDateMatch) {
+        const d = new Date(idDateMatch[1] + "T00:00:00");
         return `${d.getMonth() + 1}/${d.getDate()}`;
     }
 

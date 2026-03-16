@@ -205,6 +205,10 @@ fn process_gamma_events(events: Vec<GammaEvent>, sports: &[Sport]) -> Vec<Candid
         if labels_are_generic {
             if let (Some(ref a), Some(ref b)) = (&team_a, &team_b) {
                 outcome_labels = vec![a.clone(), b.clone()];
+            } else {
+                // Ambiguous Yes/No market with no resolvable teams in title.
+                // Skip to avoid leaking non-game markets into sports.
+                continue;
             }
         }
 
@@ -219,7 +223,8 @@ fn process_gamma_events(events: Vec<GammaEvent>, sports: &[Sport]) -> Vec<Candid
             .collect();
 
         // Extract date: prefer end_date from Gamma API, fall back to title
-        let game_date = parse_gamma_date(event.end_date.as_deref())
+        let game_date = parse_date_from_slug(&slug)
+            .or_else(|| parse_gamma_date(event.end_date.as_deref()))
             .or_else(|| parse_gamma_date(event.start_date.as_deref()))
             .or_else(|| candidate::extract_date_from_title(&title));
 
@@ -453,12 +458,6 @@ fn extract_moneyline_market(event: &GammaEvent) -> (Vec<String>, Vec<String>, bo
     if token_ids.len() != 2 || outcome_labels.len() != 2 {
         return (vec![], vec![], false);
     }
-    if outcome_labels
-        .iter()
-        .all(|o| o.eq_ignore_ascii_case("yes") || o.eq_ignore_ascii_case("no"))
-    {
-        return (vec![], vec![], false);
-    }
 
     let is_moneyline = {
         let title = market
@@ -508,6 +507,18 @@ fn parse_gamma_date(s: Option<&str>) -> Option<chrono::NaiveDate> {
     None
 }
 
+/// Extract YYYY-MM-DD date from the end of a polymarket slug such as:
+/// `nba-cle-mil-2026-03-16` -> 2026-03-16
+fn parse_date_from_slug(slug: &str) -> Option<chrono::NaiveDate> {
+    let parts: Vec<&str> = slug.rsplitn(4, '-').collect();
+    if parts.len() != 4 {
+        return None;
+    }
+    // rsplitn gives: [DD, MM, YYYY, ...]
+    let candidate = format!("{}-{}-{}", parts[2], parts[1], parts[0]);
+    chrono::NaiveDate::parse_from_str(&candidate, "%Y-%m-%d").ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -535,6 +546,13 @@ mod tests {
         // 00:30 UTC is still previous evening in US/Eastern.
         let d = parse_gamma_date(Some("2026-03-16T00:30:00Z"));
         assert_eq!(d, chrono::NaiveDate::from_ymd_opt(2026, 3, 15));
+    }
+
+    #[test]
+    fn test_parse_date_from_slug() {
+        let d = parse_date_from_slug("nba-cle-mil-2026-03-16");
+        assert_eq!(d, chrono::NaiveDate::from_ymd_opt(2026, 3, 16));
+        assert_eq!(parse_date_from_slug("nba-cle-mil"), None);
     }
 
     #[test]
@@ -694,16 +712,15 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_single_yes_no_fallback_rejects_non_team_binary() {
-        // Single market with no groupItemTitle and Yes/No is too ambiguous to
-        // treat as a sports moneyline candidate.
+    fn test_extract_single_yes_no_fallback() {
+        // Single market with no groupItemTitle and Yes/No — falls through to fallback.
         let event = make_event_with_markets(vec![
             make_market(None, &["Yes", "No"], &["tok_yes", "tok_no"]),
         ]);
         let (ids, labels, is_ml) = extract_moneyline_market(&event);
-        assert!(ids.is_empty());
-        assert!(labels.is_empty());
-        assert!(!is_ml);
+        assert_eq!(ids, vec!["tok_yes", "tok_no"]);
+        assert_eq!(labels, vec!["Yes", "No"]);
+        assert!(is_ml);
     }
 
     #[test]
@@ -818,6 +835,58 @@ mod tests {
             "Labels must not be Yes/No: {:?}",
             c.polymarket_outcome_labels
         );
+    }
+
+    #[test]
+    fn test_process_prefers_slug_date_when_present() {
+        let event = GammaEvent {
+            slug: Some("nba-cle-mil-2026-03-16".into()),
+            title: Some("Cavaliers vs. Bucks".into()),
+            closed: Some(false),
+            active: Some(true),
+            volume: None,
+            markets: Some(vec![
+                make_market(None, &["Cavaliers", "Bucks"], &["tok_cle", "tok_mil"]),
+            ]),
+            tags: Some(vec![
+                GammaTag { label: Some("NBA".into()), slug: Some("nba".into()) },
+            ]),
+            // This UTC timestamp would map to 03/15 in Eastern, but slug carries 03/16.
+            end_date: Some("2026-03-16T00:30:00Z".into()),
+            start_date: None,
+        };
+
+        let sports = vec![Sport::Nba];
+        let candidates = process_gamma_events(vec![event], &sports);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].game_date,
+            chrono::NaiveDate::from_ymd_opt(2026, 3, 16),
+            "Slug date should win over timezone-shifted end_date"
+        );
+    }
+
+    #[test]
+    fn test_process_skips_generic_yes_no_without_resolved_teams() {
+        let event = GammaEvent {
+            slug: Some("nba-ambiguous-market".into()),
+            title: Some("Will this happen?".into()),
+            closed: Some(false),
+            active: Some(true),
+            volume: None,
+            markets: Some(vec![
+                make_market(None, &["Yes", "No"], &["tok_y", "tok_n"]),
+            ]),
+            tags: Some(vec![
+                GammaTag { label: Some("NBA".into()), slug: Some("nba".into()) },
+            ]),
+            end_date: None,
+            start_date: None,
+        };
+
+        let sports = vec![Sport::Nba];
+        let candidates = process_gamma_events(vec![event], &sports);
+        assert_eq!(candidates.len(), 0, "Ambiguous Yes/No markets should be skipped");
     }
 
     /// Verify that non-NBA events are filtered out when only NBA is requested.
