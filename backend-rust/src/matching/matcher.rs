@@ -359,20 +359,25 @@ fn build_single_platform_event(
 fn build_event_id(kalshi: &CandidateEvent, poly: &CandidateEvent) -> String {
     let sport = kalshi.sport.as_str();
 
-    // Prefer Kalshi teams (more reliable abbreviations)
-    let team_a = kalshi
+    // Prefer Kalshi teams (more reliable abbreviations), then canonicalize ordering
+    // so `bos-njd` and `njd-bos` produce the same event ID.
+    let mut teams = vec![
+        kalshi
         .team_a
         .as_ref()
         .or(poly.team_a.as_ref())
         .map(|s| s.to_lowercase())
-        .unwrap_or_else(|| "unk".to_string());
-
-    let team_b = kalshi
+        .unwrap_or_else(|| "unk".to_string()),
+        kalshi
         .team_b
         .as_ref()
         .or(poly.team_b.as_ref())
         .map(|s| s.to_lowercase())
-        .unwrap_or_else(|| "unk".to_string());
+        .unwrap_or_else(|| "unk".to_string()),
+    ];
+    teams.sort();
+    let team_a = teams[0].clone();
+    let team_b = teams[1].clone();
 
     // Prefer Kalshi date (extracted from ticker, more reliable)
     let date = kalshi
@@ -553,7 +558,22 @@ mod tests {
             Some("LAL"), Some("BOS"), "lakers-celtics");
 
         let id = build_event_id(&k, &p);
-        assert_eq!(id, "nba-lal-bos-2026-03-14");
+        assert_eq!(id, "nba-bos-lal-2026-03-14");
+    }
+
+    #[test]
+    fn test_event_id_order_invariant() {
+        let date = NaiveDate::from_ymd_opt(2026, 3, 14);
+        let k = make_kalshi("NBA: LAL vs BOS", Sport::Nba, date, Some("LAL"), Some("BOS"),
+            vec!["KXNBA-LAL", "KXNBA-BOS"]);
+        let p_forward = make_poly("Lakers vs Celtics", Sport::Nba, date,
+            Some("LAL"), Some("BOS"), "lakers-celtics");
+        let p_reversed = make_poly("Celtics vs Lakers", Sport::Nba, date,
+            Some("BOS"), Some("LAL"), "celtics-lakers");
+
+        let id_forward = build_event_id(&k, &p_forward);
+        let id_reversed = build_event_id(&k, &p_reversed);
+        assert_eq!(id_forward, id_reversed, "Event ID must not depend on team order");
     }
 
     #[test]

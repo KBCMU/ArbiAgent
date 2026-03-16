@@ -21,6 +21,7 @@ pub mod matcher;
 pub mod shadow;
 pub mod team_dictionary;
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use reqwest::Client;
@@ -76,8 +77,8 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
         poly_candidates.len(),
     );
 
-    let _kalshi_count = kalshi_candidates.len();
-    let _poly_count = poly_candidates.len();
+    let kalshi_count = kalshi_candidates.len();
+    let poly_count = poly_candidates.len();
 
     // Run the matching algorithm
     let min_score = state.config.match_min_score;
@@ -97,6 +98,12 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
         .count();
 
     let total = events.len();
+
+    // Snapshot discovered sports event IDs for stale-ID reconciliation later.
+    let discovered_sports_ids: HashSet<String> = events
+        .iter()
+        .map(|e| e.id.clone())
+        .collect();
 
     // Resolve Polymarket outcome labels for matched events using Gamma API
     let client = Client::builder()
@@ -187,6 +194,9 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
                 .map(|c| c.platform_ids.polymarket_outcome_labels.clone())
                 .unwrap_or_default();
             if cached_labels != event.platform_ids.polymarket_outcome_labels {
+                // Labels changed even though token IDs are stable. Clear existing
+                // polymarket odds to avoid mixed old/new outcome keys (3-outcome bug).
+                state.cache.clear_platform_odds(&event.id, "polymarket");
                 state.cache.upsert_event(event.clone());
                 if let Err(e) = state.db.upsert_event(&event).await {
                     warn!("DB write skipped for {}: {}", event.id, e);
@@ -203,6 +213,27 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
             warn!("DB write skipped for {}: {}", event.id, e);
         }
         new_count += 1;
+    }
+
+    // Reconcile superseded sports IDs only when both platforms returned data.
+    // This avoids deleting valid cache entries during transient single-platform outages.
+    if kalshi_count > 0 && poly_count > 0 {
+        let stale_sports_ids: Vec<String> = state
+            .cache
+            .events
+            .iter()
+            .filter(|entry| {
+                let event = entry.value();
+                event.sport.is_sport() && !discovered_sports_ids.contains(entry.key())
+            })
+            .map(|entry| entry.key().clone())
+            .collect();
+
+        for id in stale_sports_ids {
+            state.cache.events.remove(&id);
+            state.cache.odds.remove(&id);
+            state.cache.active_arbs.remove(&id);
+        }
     }
 
     info!(

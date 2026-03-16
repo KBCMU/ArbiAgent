@@ -4,6 +4,7 @@
 use reqwest::Client;
 use serde::Deserialize;
 use tracing::{info, warn};
+use chrono_tz::US::Eastern;
 
 use crate::models::event::Sport;
 
@@ -449,6 +450,15 @@ fn extract_moneyline_market(event: &GammaEvent) -> (Vec<String>, Vec<String>, bo
         .as_ref()
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or_default();
+    if token_ids.len() != 2 || outcome_labels.len() != 2 {
+        return (vec![], vec![], false);
+    }
+    if outcome_labels
+        .iter()
+        .all(|o| o.eq_ignore_ascii_case("yes") || o.eq_ignore_ascii_case("no"))
+    {
+        return (vec![], vec![], false);
+    }
 
     let is_moneyline = {
         let title = market
@@ -487,7 +497,7 @@ fn parse_gamma_date(s: Option<&str>) -> Option<chrono::NaiveDate> {
     }
     // Try full ISO-8601 with time
     if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
-        return Some(dt.date_naive());
+        return Some(dt.with_timezone(&Eastern).date_naive());
     }
     // Try "YYYY-MM-DDT..." by taking first 10 chars
     if s.len() >= 10 {
@@ -517,6 +527,13 @@ mod tests {
     #[test]
     fn test_parse_gamma_date_with_offset() {
         let d = parse_gamma_date(Some("2026-03-15T19:00:00-04:00"));
+        assert_eq!(d, chrono::NaiveDate::from_ymd_opt(2026, 3, 15));
+    }
+
+    #[test]
+    fn test_parse_gamma_date_uses_eastern_day_boundary() {
+        // 00:30 UTC is still previous evening in US/Eastern.
+        let d = parse_gamma_date(Some("2026-03-16T00:30:00Z"));
         assert_eq!(d, chrono::NaiveDate::from_ymd_opt(2026, 3, 15));
     }
 
@@ -656,7 +673,7 @@ mod tests {
                 &["tok_over_yes", "tok_over_no"],
             ),
         ]);
-        let (ids, labels, is_ml) = extract_moneyline_market(&event);
+        let (ids, labels, _is_ml) = extract_moneyline_market(&event);
         assert_eq!(ids.len(), 2);
         assert_eq!(labels, vec!["Los Angeles Lakers", "Boston Celtics"]);
     }
@@ -677,14 +694,16 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_single_yes_no_fallback() {
-        // Single market with no groupItemTitle and Yes/No — falls through to fallback
+    fn test_extract_single_yes_no_fallback_rejects_non_team_binary() {
+        // Single market with no groupItemTitle and Yes/No is too ambiguous to
+        // treat as a sports moneyline candidate.
         let event = make_event_with_markets(vec![
             make_market(None, &["Yes", "No"], &["tok_yes", "tok_no"]),
         ]);
-        let (ids, labels, _is_ml) = extract_moneyline_market(&event);
-        assert_eq!(ids, vec!["tok_yes", "tok_no"]);
-        assert_eq!(labels, vec!["Yes", "No"]);
+        let (ids, labels, is_ml) = extract_moneyline_market(&event);
+        assert!(ids.is_empty());
+        assert!(labels.is_empty());
+        assert!(!is_ml);
     }
 
     #[test]

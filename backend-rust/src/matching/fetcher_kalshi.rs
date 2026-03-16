@@ -126,14 +126,13 @@ fn kalshi_event_to_candidate(event: KalshiEvent, sport: Sport) -> Option<Candida
         return None;
     }
 
-    // Detect moneyline: typically has 2 outcomes (team A, team B)
-    // Spread/O-U markets have different structures
-    let is_moneyline = active_tickers.len() == 2;
-
     // Extract teams from market tickers (most reliable for Kalshi),
     // then normalize through the team dictionary so Kalshi abbreviations
     // like "NJ" become canonical "NJD" that match Polymarket labels.
     let (team_a_raw, team_b_raw) = candidate::extract_teams_from_kalshi_tickers(&active_tickers);
+    // Some Kalshi events include additional active nested markets (spread/O-U),
+    // so `len()==2` is too strict and causes moneyline false-negatives.
+    let is_moneyline = team_a_raw.is_some() && team_b_raw.is_some();
     let team_a = team_a_raw.map(|t| {
         team_dictionary::lookup_team(&t, Some(sport)).unwrap_or(t)
     });
@@ -164,4 +163,44 @@ fn kalshi_event_to_candidate(event: KalshiEvent, sport: Sport) -> Option<Candida
         polymarket_token_ids: vec![],
         polymarket_outcome_labels: vec![],
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_market(ticker: &str, status: &str) -> KalshiMarketNested {
+        KalshiMarketNested {
+            ticker: ticker.to_string(),
+            yes_sub_title: None,
+            no_sub_title: None,
+            status: Some(status.to_string()),
+            yes_bid_dollars: None,
+            yes_ask_dollars: None,
+            last_price_dollars: None,
+            volume_24h_fp: None,
+        }
+    }
+
+    #[test]
+    fn test_moneyline_detected_with_extra_active_markets() {
+        // Real-world shape: winner + spread/total can all be active at once.
+        let event = KalshiEvent {
+            event_ticker: "KXNHLGAME-26MAR15BOSNJD".to_string(),
+            series_ticker: None,
+            title: "NHL: Boston Bruins vs New Jersey Devils".to_string(),
+            sub_title: None,
+            category: None,
+            markets: Some(vec![
+                make_market("KXNHLGAME-26MAR15BOSNJD-BOS", "active"),
+                make_market("KXNHLGAME-26MAR15BOSNJD-NJ", "active"),
+                make_market("KXNHLGAME-26MAR15BOSNJD-SPREAD-BOS", "active"),
+            ]),
+        };
+
+        let candidate = kalshi_event_to_candidate(event, Sport::Nhl).expect("candidate");
+        assert!(candidate.is_moneyline, "Should still be moneyline despite extra active markets");
+        assert_eq!(candidate.team_a.as_deref(), Some("BOS"));
+        assert_eq!(candidate.team_b.as_deref(), Some("NJD"));
+    }
 }

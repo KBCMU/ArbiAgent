@@ -8,7 +8,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::models::event::{is_event_past, is_event_settled_full};
+use crate::models::event::{is_event_past, is_event_settled_full, CanonicalEvent, EventOdds};
 use crate::models::platform::{
     ArbOpportunityResponse, EventResponse, OutcomePriceResponse, PlatformOddsResponse,
 };
@@ -53,6 +53,51 @@ struct ListEventsParams {
     limit: Option<usize>,
 }
 
+fn has_binary_outcomes(event: &CanonicalEvent, odds_opt: Option<&EventOdds>) -> bool {
+    // Prefer actual odds-map cardinality when available (source of truth for
+    // what the frontend will render). Fall back to platform metadata when odds
+    // are missing.
+    if let Some(odds) = odds_opt {
+        if event.sport.is_sport() {
+            if let Some(k) = odds.platform_odds.get("kalshi") {
+                if !k.is_empty() && k.len() != 2 {
+                    return false;
+                }
+            }
+            if let Some(p) = odds.platform_odds.get("polymarket") {
+                if !p.is_empty() && p.len() != 2 {
+                    return false;
+                }
+            }
+
+            // Safety net: ensure rendered union is still binary even if platform
+            // keys diverge (e.g. stale relabel keys).
+            let mut rendered_outcomes = std::collections::HashSet::new();
+            if let Some(k) = odds.platform_odds.get("kalshi") {
+                for key in k.keys() {
+                    rendered_outcomes.insert(key.to_lowercase());
+                }
+            }
+            if let Some(p) = odds.platform_odds.get("polymarket") {
+                for key in p.keys() {
+                    rendered_outcomes.insert(key.to_lowercase());
+                }
+            }
+            if !rendered_outcomes.is_empty() && rendered_outcomes.len() != 2 {
+                return false;
+            }
+        }
+        true
+    } else {
+        let outcome_count = if !event.platform_ids.kalshi_market_tickers.is_empty() {
+            event.platform_ids.kalshi_market_tickers.len()
+        } else {
+            event.platform_ids.polymarket_token_ids.len()
+        };
+        outcome_count == 2
+    }
+}
+
 async fn list_events(
     State(state): State<Arc<AppState>>,
     Query(params): Query<ListEventsParams>,
@@ -63,15 +108,7 @@ async fn list_events(
     let mut responses: Vec<EventResponse> = events_with_odds
         .into_iter()
         .filter(|(event, odds_opt)| {
-            // Only show binary (2-outcome) events — excludes championship/futures markets
-            // with many outcomes (e.g. "2026 NBA Champion"). The outcome count is the
-            // number of Kalshi market tickers when present, otherwise Polymarket token IDs.
-            let outcome_count = if !event.platform_ids.kalshi_market_tickers.is_empty() {
-                event.platform_ids.kalshi_market_tickers.len()
-            } else {
-                event.platform_ids.polymarket_token_ids.len()
-            };
-            if outcome_count != 2 {
+            if !has_binary_outcomes(event, odds_opt.as_ref()) {
                 return false;
             }
             // For sports events: reject any that still have generic Yes/No labels
@@ -326,5 +363,78 @@ async fn arb_stats(State(state): State<Arc<AppState>>) -> Json<serde_json::Value
             "error": "Failed to fetch arb stats",
             "message": e.to_string(),
         })),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use std::collections::HashMap;
+    use crate::models::event::{OutcomePrice, PlatformIds, Sport};
+
+    fn make_event() -> CanonicalEvent {
+        CanonicalEvent {
+            id: "nhl-bos-njd-2026-03-15".to_string(),
+            sport: Sport::Nhl,
+            event_title: "Bruins vs Devils".to_string(),
+            game_start_time: None,
+            status: "open".to_string(),
+            platform_ids: PlatformIds {
+                kalshi_event_ticker: None,
+                kalshi_market_tickers: vec!["KX1".to_string(), "KX2".to_string()],
+                polymarket_market_slug: None,
+                polymarket_token_ids: vec!["p1".to_string(), "p2".to_string()],
+                polymarket_outcome_labels: vec!["BOS".to_string(), "NJD".to_string()],
+            },
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn make_price() -> OutcomePrice {
+        OutcomePrice {
+            yes_price: 0.5,
+            no_price: 0.5,
+            best_bid: None,
+            best_ask: None,
+            bid_size: None,
+            ask_size: None,
+        }
+    }
+
+    #[test]
+    fn test_has_binary_outcomes_rejects_three_rendered_keys() {
+        let event = make_event();
+        let mut odds = EventOdds {
+            canonical_event_id: event.id.clone(),
+            platform_odds: HashMap::new(),
+            updated_at: Utc::now(),
+        };
+
+        let mut poly = HashMap::new();
+        poly.insert("BOS".to_string(), make_price());
+        poly.insert("NJD".to_string(), make_price());
+        poly.insert("bruins".to_string(), make_price());
+        odds.platform_odds.insert("polymarket".to_string(), poly);
+
+        assert!(!has_binary_outcomes(&event, Some(&odds)));
+    }
+
+    #[test]
+    fn test_has_binary_outcomes_accepts_two_keys() {
+        let event = make_event();
+        let mut odds = EventOdds {
+            canonical_event_id: event.id.clone(),
+            platform_odds: HashMap::new(),
+            updated_at: Utc::now(),
+        };
+
+        let mut poly = HashMap::new();
+        poly.insert("BOS".to_string(), make_price());
+        poly.insert("NJD".to_string(), make_price());
+        odds.platform_odds.insert("polymarket".to_string(), poly);
+
+        assert!(has_binary_outcomes(&event, Some(&odds)));
     }
 }

@@ -151,6 +151,9 @@ impl StateCache {
                     if odds.updated_at < cutoff {
                         return true;
                     }
+                } else if event.updated_at < cutoff {
+                    // Also evict no-odds events that have not been refreshed.
+                    return true;
                 }
                 false
             })
@@ -165,5 +168,55 @@ impl StateCache {
         }
 
         evicted
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{Duration, Utc};
+    use crate::models::event::{PlatformIds, Sport};
+
+    fn make_event(id: &str, sport: Sport, updated_at: chrono::DateTime<Utc>) -> CanonicalEvent {
+        CanonicalEvent {
+            id: id.to_string(),
+            sport,
+            event_title: "Test Event".to_string(),
+            game_start_time: None,
+            status: "open".to_string(),
+            platform_ids: PlatformIds {
+                kalshi_event_ticker: None,
+                kalshi_market_tickers: vec![],
+                polymarket_market_slug: None,
+                polymarket_token_ids: vec![],
+                polymarket_outcome_labels: vec![],
+            },
+            created_at: updated_at,
+            updated_at,
+        }
+    }
+
+    #[test]
+    fn test_evict_stale_no_odds_event() {
+        let cache = StateCache::new();
+        let stale_ts = Utc::now() - Duration::hours(10);
+        let id = "nba-bos-lal-nodate";
+        cache.upsert_event(make_event(id, Sport::Nba, stale_ts));
+
+        let evicted = cache.evict_stale_events(2);
+        assert_eq!(evicted, 1);
+        assert!(!cache.events.contains_key(id));
+    }
+
+    #[test]
+    fn test_keep_fresh_no_odds_event() {
+        let cache = StateCache::new();
+        let fresh_ts = Utc::now() - Duration::minutes(30);
+        let id = "nba-bos-lal-nodate";
+        cache.upsert_event(make_event(id, Sport::Nba, fresh_ts));
+
+        let evicted = cache.evict_stale_events(2);
+        assert_eq!(evicted, 0);
+        assert!(cache.events.contains_key(id));
     }
 }
