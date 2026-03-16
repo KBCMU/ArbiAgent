@@ -442,10 +442,10 @@ pub fn sport_to_kalshi_series(sport: Sport) -> &'static [&'static str] {
 /// Sport → Polymarket Gamma API tag strings.
 pub fn sport_to_polymarket_tags(sport: Sport) -> &'static [&'static str] {
     match sport {
-        Sport::Nfl => &["nfl", "football"],
-        Sport::Nba => &["nba", "basketball"],
-        Sport::Mlb => &["mlb", "baseball"],
-        Sport::Nhl => &["nhl", "hockey"],
+        Sport::Nfl => &["nfl", "football", "Games"],
+        Sport::Nba => &["nba", "basketball", "Games"],
+        Sport::Mlb => &["mlb", "baseball", "Games"],
+        Sport::Nhl => &["nhl", "hockey", "Games"],
         Sport::Cfb => &["ncaaf", "college football"],
         Sport::Cbb => &["ncaab", "college basketball"],
         Sport::Pga => &["pga", "golf"],

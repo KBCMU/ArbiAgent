@@ -184,6 +184,13 @@ pub async fn resolve_polymarket_labels(
 
 // ─── Internal ───────────────────────────────────────────────────────
 
+/// Fetch Gamma event metadata and build a token_id → label mapping.
+///
+/// Handles two structures:
+/// 1. **Single market** with team-name outcomes: maps each token directly.
+/// 2. **Grouped event** with per-team markets (`groupItemTitle` = team name,
+///    `outcomes = ["Yes","No"]`): maps each market's "Yes" token to its
+///    `groupItemTitle`.
 async fn fetch_gamma_event_metadata(
     client: &Client,
     slug: &str,
@@ -206,35 +213,48 @@ async fn fetch_gamma_event_metadata(
     let event: GammaEventResponse = resp.json().await?;
     let markets = event.markets.unwrap_or_default();
 
-    // Find moneyline market
-    let market = markets
-        .iter()
-        .find(|m| {
-            let title = m.group_item_title.as_deref().unwrap_or("").to_lowercase();
-            title.is_empty() || title.contains("winner") || title.contains("moneyline")
-        })
-        .or_else(|| markets.first());
-
-    let market = match market {
-        Some(m) => m,
-        None => anyhow::bail!("No markets found in Gamma response for {}", slug),
-    };
-
-    let token_ids: Vec<String> = market
-        .clob_token_ids
-        .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok())
-        .unwrap_or_default();
-
-    let outcomes: Vec<String> = market
-        .outcomes
-        .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok())
-        .unwrap_or_default();
-
     let mut mapping = HashMap::new();
-    for (tid, label) in token_ids.into_iter().zip(outcomes.into_iter()) {
-        mapping.insert(tid, label);
+
+    for market in &markets {
+        let token_ids: Vec<String> = market
+            .clob_token_ids
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default();
+
+        let outcomes: Vec<String> = market
+            .outcomes
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default();
+
+        let is_yes_no = outcomes
+            .iter()
+            .any(|o| o.eq_ignore_ascii_case("yes") || o.eq_ignore_ascii_case("no"));
+
+        if is_yes_no {
+            // Grouped market: use groupItemTitle as the label for the Yes token
+            if let Some(title) = &market.group_item_title {
+                if !title.is_empty() {
+                    let yes_idx = outcomes
+                        .iter()
+                        .position(|o| o.eq_ignore_ascii_case("yes"))
+                        .unwrap_or(0);
+                    if let Some(tid) = token_ids.get(yes_idx) {
+                        mapping.insert(tid.clone(), title.clone());
+                    }
+                }
+            }
+        } else {
+            // Standard market: map each token to its outcome label
+            for (tid, label) in token_ids.into_iter().zip(outcomes.into_iter()) {
+                mapping.insert(tid, label);
+            }
+        }
+    }
+
+    if mapping.is_empty() {
+        anyhow::bail!("No token mappings found in Gamma response for {}", slug);
     }
 
     Ok(mapping)

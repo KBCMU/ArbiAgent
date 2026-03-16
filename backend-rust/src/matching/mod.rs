@@ -110,13 +110,19 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
         let is_cached = state.cache.events.contains_key(&event.id);
 
         // For dual-platform events, check if labels need resolution.
-        // We resolve if:
-        //   (a) the event is new (not yet in cache), OR
-        //   (b) the cached event still has generic "Yes"/"No" labels (resolution failed before)
+        // Only resolve if labels are generic "Yes"/"No"/empty — NOT if the fetcher
+        // already populated real team names (e.g. "Warriors", "Knicks").
+        let current_labels = &event.platform_ids.polymarket_outcome_labels;
+        let current_labels_are_generic = current_labels.is_empty()
+            || current_labels.iter().any(|l| {
+                let u = l.to_uppercase();
+                u == "YES" || u == "NO" || l.is_empty()
+            });
+
         let needs_label_resolution = !event.platform_ids.kalshi_market_tickers.is_empty()
             && !event.platform_ids.polymarket_token_ids.is_empty()
             && {
-                let labels_are_generic = if is_cached {
+                if is_cached {
                     // Check the cached event's labels
                     state.cache.events.get(&event.id).map_or(true, |cached| {
                         cached.platform_ids.polymarket_outcome_labels.iter().any(|l| {
@@ -125,11 +131,30 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
                         })
                     })
                 } else {
-                    // New event — always resolve
-                    true
-                };
-                labels_are_generic
+                    // New event — only resolve if current labels are generic
+                    current_labels_are_generic
+                }
             };
+
+        // Detect if cached event's token_ids are stale (e.g., from the grouped
+        // market fix — old code grabbed one team's Yes/No tokens instead of
+        // each team's Yes token).
+        let token_ids_changed = if is_cached {
+            state.cache.events.get(&event.id).map_or(false, |cached| {
+                cached.platform_ids.polymarket_token_ids
+                    != event.platform_ids.polymarket_token_ids
+            })
+        } else {
+            false
+        };
+
+        if token_ids_changed {
+            info!(
+                "Token IDs changed for {} — clearing stale Polymarket odds",
+                event.id
+            );
+            state.cache.clear_platform_odds(&event.id, "polymarket");
+        }
 
         if needs_label_resolution {
             let resolved = label_resolver::resolve_polymarket_labels(
@@ -149,16 +174,14 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
             if resolved_are_real {
                 event.platform_ids.polymarket_outcome_labels = resolved;
                 if is_cached {
-                    // Clear stale "Yes"/"No" odds so they don't coexist with new labels
                     state.cache.clear_platform_odds(&event.id, "polymarket");
                     relabeled_count += 1;
                 }
             } else if !is_cached {
-                // Still generic labels — store them anyway for new events
                 event.platform_ids.polymarket_outcome_labels = resolved;
             }
-        } else if is_cached {
-            // Labels are already good and event is cached — skip
+        } else if is_cached && !token_ids_changed {
+            // Labels are good AND token_ids unchanged — skip
             continue;
         }
 
