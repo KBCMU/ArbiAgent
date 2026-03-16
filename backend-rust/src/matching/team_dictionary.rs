@@ -19,17 +19,17 @@ struct TeamEntry {
 /// All team entries across all supported leagues.
 static TEAM_ENTRIES: &[TeamEntry] = &[
     // ── NBA ──────────────────────────────────────────────────────────
-    TeamEntry { abbrev: "ATL", keywords: &["hawks", "atlanta hawks"], sport: Sport::Nba },
+    TeamEntry { abbrev: "ATL", keywords: &["hawks", "atlanta hawks", "atlanta"], sport: Sport::Nba },
     TeamEntry { abbrev: "BOS", keywords: &["celtics", "boston celtics", "boston"], sport: Sport::Nba },
     TeamEntry { abbrev: "BKN", keywords: &["nets", "brooklyn nets", "brooklyn"], sport: Sport::Nba },
     TeamEntry { abbrev: "CHA", keywords: &["hornets", "charlotte hornets", "charlotte"], sport: Sport::Nba },
-    TeamEntry { abbrev: "CHI", keywords: &["bulls", "chicago bulls"], sport: Sport::Nba },
+    TeamEntry { abbrev: "CHI", keywords: &["bulls", "chicago bulls", "chicago"], sport: Sport::Nba },
     TeamEntry { abbrev: "CLE", keywords: &["cavaliers", "cavs", "cleveland cavaliers", "cleveland"], sport: Sport::Nba },
     TeamEntry { abbrev: "DAL", keywords: &["mavericks", "mavs", "dallas mavericks"], sport: Sport::Nba },
-    TeamEntry { abbrev: "DEN", keywords: &["nuggets", "denver nuggets"], sport: Sport::Nba },
+    TeamEntry { abbrev: "DEN", keywords: &["nuggets", "denver nuggets", "denver"], sport: Sport::Nba },
     TeamEntry { abbrev: "DET", keywords: &["pistons", "detroit pistons"], sport: Sport::Nba },
     TeamEntry { abbrev: "GSW", keywords: &["warriors", "golden state warriors", "golden state"], sport: Sport::Nba },
-    TeamEntry { abbrev: "HOU", keywords: &["rockets", "houston rockets"], sport: Sport::Nba },
+    TeamEntry { abbrev: "HOU", keywords: &["rockets", "houston rockets", "houston"], sport: Sport::Nba },
     TeamEntry { abbrev: "IND", keywords: &["pacers", "indiana pacers"], sport: Sport::Nba },
     TeamEntry { abbrev: "LAC", keywords: &["clippers", "la clippers", "los angeles clippers"], sport: Sport::Nba },
     TeamEntry { abbrev: "LAL", keywords: &["lakers", "la lakers", "los angeles lakers"], sport: Sport::Nba },
@@ -40,7 +40,7 @@ static TEAM_ENTRIES: &[TeamEntry] = &[
     TeamEntry { abbrev: "NOP", keywords: &["pelicans", "new orleans pelicans", "new orleans"], sport: Sport::Nba },
     TeamEntry { abbrev: "NYK", keywords: &["knicks", "new york knicks"], sport: Sport::Nba },
     TeamEntry { abbrev: "OKC", keywords: &["thunder", "oklahoma city thunder", "oklahoma city"], sport: Sport::Nba },
-    TeamEntry { abbrev: "ORL", keywords: &["magic", "orlando magic", "orlando"], sport: Sport::Nba },
+    TeamEntry { abbrev: "ORL", keywords: &["magic", "orlando magic"], sport: Sport::Nba },
     TeamEntry { abbrev: "PHI", keywords: &["76ers", "sixers", "philadelphia 76ers", "philadelphia"], sport: Sport::Nba },
     TeamEntry { abbrev: "PHX", keywords: &["suns", "phoenix suns", "phoenix"], sport: Sport::Nba },
     TeamEntry { abbrev: "POR", keywords: &["trail blazers", "blazers", "portland trail blazers", "portland"], sport: Sport::Nba },
@@ -118,7 +118,7 @@ static TEAM_ENTRIES: &[TeamEntry] = &[
 
     // ── NHL ──────────────────────────────────────────────────────────
     TeamEntry { abbrev: "ANA", keywords: &["ducks", "anaheim ducks", "anaheim"], sport: Sport::Nhl },
-    TeamEntry { abbrev: "ARI", keywords: &["coyotes", "utah hockey club", "utah hc"], sport: Sport::Nhl },
+    TeamEntry { abbrev: "UTA", keywords: &["utah hockey club", "utah hc", "utah hockey"], sport: Sport::Nhl },
     TeamEntry { abbrev: "BOS", keywords: &["bruins", "boston bruins"], sport: Sport::Nhl },
     TeamEntry { abbrev: "BUF", keywords: &["sabres", "buffalo sabres"], sport: Sport::Nhl },
     TeamEntry { abbrev: "CGY", keywords: &["flames", "calgary flames", "calgary"], sport: Sport::Nhl },
@@ -150,13 +150,122 @@ static TEAM_ENTRIES: &[TeamEntry] = &[
     TeamEntry { abbrev: "WPG", keywords: &["jets", "winnipeg jets", "winnipeg"], sport: Sport::Nhl },
     TeamEntry { abbrev: "WSH", keywords: &["capitals", "washington capitals", "caps"], sport: Sport::Nhl },
 
-    // ── MLS (new — not in DomeAPI) ──────────────────────────────────
-    TeamEntry { abbrev: "ATL", keywords: &["atlanta united", "atl united"], sport: Sport::Nfl /* reuse sport field loosely for MLS */ },
-    // More MLS teams can be added as needed
+    // ── CBB (College Basketball — major programs) ────────────────────
+    TeamEntry { abbrev: "DUK", keywords: &["duke", "duke blue devils", "blue devils"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "UNC", keywords: &["north carolina", "unc", "tar heels", "tarheels"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "KU", keywords: &["kansas", "kansas jayhawks", "jayhawks"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "UK", keywords: &["kentucky", "kentucky wildcats"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "GONZ", keywords: &["gonzaga", "gonzaga bulldogs", "zags"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "AUB", keywords: &["auburn", "auburn tigers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "HOU", keywords: &["houston", "houston cougars"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "FLA", keywords: &["florida", "florida gators", "gators"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "TENN", keywords: &["tennessee", "tennessee volunteers", "vols"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "PUR", keywords: &["purdue", "purdue boilermakers", "boilermakers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "ALA", keywords: &["alabama", "alabama crimson tide", "crimson tide", "bama"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "ARIZ", keywords: &["arizona", "arizona wildcats"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "BAYLOR", keywords: &["baylor", "baylor bears"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "CONN", keywords: &["uconn", "connecticut", "connecticut huskies", "huskies"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "IOWA", keywords: &["iowa", "iowa hawkeyes", "hawkeyes"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "ISU", keywords: &["iowa state", "iowa state cyclones", "cyclones"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "IU", keywords: &["indiana", "indiana hoosiers", "hoosiers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "MARQ", keywords: &["marquette", "marquette golden eagles"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "MICH", keywords: &["michigan", "michigan wolverines", "wolverines"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "MSU", keywords: &["michigan state", "michigan state spartans", "spartans"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "NCST", keywords: &["nc state", "north carolina state", "wolfpack"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "ORE", keywords: &["oregon", "oregon ducks"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "OSU", keywords: &["ohio state", "ohio state buckeyes", "buckeyes"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "SYR", keywords: &["syracuse", "syracuse orange"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "TEX", keywords: &["texas", "texas longhorns", "longhorns"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "TXAM", keywords: &["texas a&m", "texas am", "aggies"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "UCLA", keywords: &["ucla", "ucla bruins", "bruins"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "UVA", keywords: &["virginia", "virginia cavaliers", "cavaliers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "VILL", keywords: &["villanova", "villanova wildcats"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "WIS", keywords: &["wisconsin", "wisconsin badgers", "badgers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "CREIGH", keywords: &["creighton", "creighton bluejays"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "SDSU", keywords: &["san diego state", "san diego state aztecs", "aztecs"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "MIZZ", keywords: &["missouri", "missouri tigers", "mizzou"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "ARK", keywords: &["arkansas", "arkansas razorbacks", "razorbacks"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "LSU", keywords: &["lsu", "louisiana state", "lsu tigers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "MISS", keywords: &["ole miss", "mississippi", "mississippi rebels", "rebels"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "SC", keywords: &["south carolina", "south carolina gamecocks", "gamecocks"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "VT", keywords: &["virginia tech", "virginia tech hokies", "hokies"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "LOU", keywords: &["louisville", "louisville cardinals"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "PITT", keywords: &["pittsburgh", "pittsburgh panthers", "pitt"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "WAKE", keywords: &["wake forest", "wake forest demon deacons"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "CLEM", keywords: &["clemson", "clemson tigers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "GT", keywords: &["georgia tech", "georgia tech yellow jackets"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "UGA", keywords: &["georgia", "georgia bulldogs", "bulldogs"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "TTU", keywords: &["texas tech", "texas tech red raiders", "red raiders"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "TCU", keywords: &["tcu", "texas christian"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "WVU", keywords: &["west virginia", "west virginia mountaineers", "mountaineers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "OKLA", keywords: &["oklahoma", "oklahoma sooners", "sooners"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "OKST", keywords: &["oklahoma state", "oklahoma state cowboys"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "STAN", keywords: &["stanford", "stanford cardinal"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "USC", keywords: &["usc", "southern california", "trojans"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "COLO", keywords: &["colorado", "colorado buffaloes", "buffaloes", "buffs"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "UTAH", keywords: &["utah", "utah utes", "utes"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "ASU", keywords: &["arizona state", "arizona state sun devils", "sun devils"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "WASH", keywords: &["washington", "washington huskies"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "NEB", keywords: &["nebraska", "nebraska cornhuskers", "cornhuskers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "MINN", keywords: &["minnesota", "minnesota golden gophers", "golden gophers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "ILL", keywords: &["illinois", "illinois fighting illini", "illini"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "NW", keywords: &["northwestern", "northwestern wildcats"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "RUT", keywords: &["rutgers", "rutgers scarlet knights"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "MARY", keywords: &["maryland", "maryland terrapins", "terps"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "PSU", keywords: &["penn state", "penn state nittany lions", "nittany lions"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "SMC", keywords: &["saint mary's", "saint marys", "st mary's", "st marys", "gaels"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "DAY", keywords: &["dayton", "dayton flyers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "MEMPH", keywords: &["memphis", "memphis tigers"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "CINCY", keywords: &["cincinnati", "cincinnati bearcats", "bearcats"], sport: Sport::Cbb },
+    TeamEntry { abbrev: "MSST", keywords: &["mississippi state", "mississippi state bulldogs"], sport: Sport::Cbb },
 
-    // ── CFB / CBB are handled via direct abbreviation matching ──────
-    // College teams are too numerous to enumerate; the matcher uses
-    // fuzzy/subsequence matching for these (same as the existing approach).
+    // ── CFB (College Football — major programs) ─────────────────────
+    TeamEntry { abbrev: "DUK", keywords: &["duke", "duke blue devils"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "UNC", keywords: &["north carolina", "unc", "tar heels"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "ALA", keywords: &["alabama", "crimson tide", "bama"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "UGA", keywords: &["georgia", "georgia bulldogs", "bulldogs"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "OSU", keywords: &["ohio state", "ohio state buckeyes", "buckeyes"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "MICH", keywords: &["michigan", "michigan wolverines", "wolverines"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "TEX", keywords: &["texas", "texas longhorns", "longhorns"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "USC", keywords: &["usc", "southern california", "trojans"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "LSU", keywords: &["lsu", "louisiana state", "lsu tigers"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "CLEM", keywords: &["clemson", "clemson tigers"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "ORE", keywords: &["oregon", "oregon ducks", "ducks"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "PSU", keywords: &["penn state", "penn state nittany lions"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "FLA", keywords: &["florida", "florida gators", "gators"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "AUB", keywords: &["auburn", "auburn tigers"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "TENN", keywords: &["tennessee", "tennessee volunteers", "vols"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "OKLA", keywords: &["oklahoma", "oklahoma sooners", "sooners"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "TXAM", keywords: &["texas a&m", "texas am", "aggies"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "NOTRD", keywords: &["notre dame", "notre dame fighting irish", "fighting irish"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "WASH", keywords: &["washington", "washington huskies"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "MSU", keywords: &["michigan state", "michigan state spartans", "spartans"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "WIS", keywords: &["wisconsin", "wisconsin badgers", "badgers"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "IOWA", keywords: &["iowa", "iowa hawkeyes", "hawkeyes"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "ARK", keywords: &["arkansas", "arkansas razorbacks", "razorbacks"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "MISS", keywords: &["ole miss", "mississippi", "rebels"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "COLO", keywords: &["colorado", "colorado buffaloes", "buffs"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "BOISE", keywords: &["boise state", "boise state broncos"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "UCF", keywords: &["ucf", "central florida", "knights"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "MIA", keywords: &["miami", "miami hurricanes", "hurricanes"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "NCST", keywords: &["nc state", "north carolina state", "wolfpack"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "VT", keywords: &["virginia tech", "hokies"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "SC", keywords: &["south carolina", "gamecocks"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "MIZZ", keywords: &["missouri", "mizzou", "missouri tigers"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "KSU", keywords: &["kansas state", "kansas state wildcats"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "TTU", keywords: &["texas tech", "red raiders"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "TCU", keywords: &["tcu", "texas christian", "horned frogs"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "BYU", keywords: &["byu", "brigham young", "cougars"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "UTAH", keywords: &["utah", "utah utes", "utes"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "ASU", keywords: &["arizona state", "sun devils"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "ARIZ", keywords: &["arizona", "arizona wildcats"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "NEB", keywords: &["nebraska", "cornhuskers"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "ILL", keywords: &["illinois", "fighting illini", "illini"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "PUR", keywords: &["purdue", "boilermakers"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "IU", keywords: &["indiana", "indiana hoosiers", "hoosiers"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "MINN", keywords: &["minnesota", "golden gophers"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "STAN", keywords: &["stanford", "stanford cardinal"], sport: Sport::Cfb },
+    TeamEntry { abbrev: "UCLA", keywords: &["ucla", "ucla bruins"], sport: Sport::Cfb },
 ];
 
 /// Pre-built lookup: lowercase keyword → abbreviation.
@@ -421,5 +530,86 @@ mod tests {
         assert!(subsequence_score("LAKERS", "LAL") > 0);
         assert!(subsequence_score("CELTICS", "BOS") == 0);
         assert_eq!(subsequence_score("LAKERS", "LAK"), 3);
+    }
+
+    // ── CBB team lookups ────────────────────────────────────────
+    #[test]
+    fn test_lookup_cbb_duke() {
+        assert_eq!(lookup_team("duke", Some(Sport::Cbb)).as_deref(), Some("DUK"));
+        assert_eq!(lookup_team("blue devils", Some(Sport::Cbb)).as_deref(), Some("DUK"));
+        assert_eq!(lookup_team("Duke Blue Devils", Some(Sport::Cbb)).as_deref(), Some("DUK"));
+    }
+
+    #[test]
+    fn test_lookup_cbb_unc() {
+        assert_eq!(lookup_team("north carolina", Some(Sport::Cbb)).as_deref(), Some("UNC"));
+        assert_eq!(lookup_team("tar heels", Some(Sport::Cbb)).as_deref(), Some("UNC"));
+        assert_eq!(lookup_team("unc", Some(Sport::Cbb)).as_deref(), Some("UNC"));
+    }
+
+    #[test]
+    fn test_lookup_cbb_gonzaga() {
+        assert_eq!(lookup_team("gonzaga", Some(Sport::Cbb)).as_deref(), Some("GONZ"));
+        assert_eq!(lookup_team("zags", Some(Sport::Cbb)).as_deref(), Some("GONZ"));
+    }
+
+    #[test]
+    fn test_lookup_cbb_uconn() {
+        assert_eq!(lookup_team("uconn", Some(Sport::Cbb)).as_deref(), Some("CONN"));
+        assert_eq!(lookup_team("connecticut huskies", Some(Sport::Cbb)).as_deref(), Some("CONN"));
+    }
+
+    #[test]
+    fn test_lookup_nhl_utah() {
+        assert_eq!(lookup_team("utah hockey club", Some(Sport::Nhl)).as_deref(), Some("UTA"));
+    }
+
+    #[test]
+    fn test_lookup_cfb_notre_dame() {
+        assert_eq!(lookup_team("notre dame", Some(Sport::Cfb)).as_deref(), Some("NOTRD"));
+        assert_eq!(lookup_team("fighting irish", Some(Sport::Cfb)).as_deref(), Some("NOTRD"));
+    }
+
+    #[test]
+    fn test_sport_to_kalshi_series_cbb() {
+        let series = sport_to_kalshi_series(Sport::Cbb);
+        assert!(series.contains(&"KXCBBGAME"));
+    }
+
+    #[test]
+    fn test_sport_to_polymarket_tags_cbb() {
+        let tags = sport_to_polymarket_tags(Sport::Cbb);
+        assert!(tags.contains(&"ncaab") || tags.contains(&"college basketball"));
+    }
+
+    #[test]
+    fn test_city_disambiguation_with_sport_scope() {
+        // "chicago" should resolve to CHI in NBA (Bulls) context
+        assert_eq!(lookup_team("chicago", Some(Sport::Nba)).as_deref(), Some("CHI"));
+        // "houston" should resolve to HOU in NBA (Rockets) context
+        assert_eq!(lookup_team("houston", Some(Sport::Nba)).as_deref(), Some("HOU"));
+        // "denver" should resolve to DEN in NBA (Nuggets) context
+        assert_eq!(lookup_team("denver", Some(Sport::Nba)).as_deref(), Some("DEN"));
+    }
+
+    #[test]
+    fn test_case_insensitive_lookup() {
+        assert_eq!(lookup_team("LAKERS", Some(Sport::Nba)).as_deref(), Some("LAL"));
+        assert_eq!(lookup_team("Lakers", Some(Sport::Nba)).as_deref(), Some("LAL"));
+        assert_eq!(lookup_team("lakers", Some(Sport::Nba)).as_deref(), Some("LAL"));
+    }
+
+    #[test]
+    fn test_match_label_to_abbrev_nhl() {
+        let valid = vec!["TOR".to_string(), "BOS".to_string()];
+        assert_eq!(match_label_to_abbrev("Maple Leafs", &valid).as_deref(), Some("TOR"));
+        assert_eq!(match_label_to_abbrev("Bruins", &valid).as_deref(), Some("BOS"));
+    }
+
+    #[test]
+    fn test_match_label_to_abbrev_cbb() {
+        let valid = vec!["DUK".to_string(), "UNC".to_string()];
+        assert_eq!(match_label_to_abbrev("Duke", &valid).as_deref(), Some("DUK"));
+        assert_eq!(match_label_to_abbrev("North Carolina", &valid).as_deref(), Some("UNC"));
     }
 }

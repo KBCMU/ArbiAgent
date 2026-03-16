@@ -130,12 +130,38 @@ pub fn extract_teams_from_kalshi_tickers(market_tickers: &[String]) -> (Option<S
 pub fn extract_teams_from_title(title: &str, sport: Sport) -> (Option<String>, Option<String>) {
     let lower = title.to_lowercase();
 
+    // Strip common Polymarket preambles so separator detection works
+    let cleaned = lower
+        .replace("will the ", "")
+        .replace("will ", "")
+        .replace("who will win ", "")
+        .replace("who wins ", "");
+    let cleaned = cleaned.trim();
+
     // Split on "vs", "v.", "at", "@", or Polymarket-style separators
-    let separators = ["vs.", "vs", "v.", " at ", " @ ", " beat ", " beats ", " defeat ", " defeats ", " over "];
+    let separators = [" vs. ", " vs ", " v. ", " at ", " @ ", " beat ", " beats ", " defeat ", " defeats ", " over "];
+    for sep in separators {
+        if let Some(idx) = cleaned.find(sep) {
+            let left = cleaned[..idx].trim();
+            let right = cleaned[idx + sep.len()..].trim();
+            // Strip trailing punctuation (e.g., "?")
+            let right = right.trim_end_matches(|c: char| !c.is_alphanumeric() && c != '\'' && c != '-');
+
+            let team_a = super::team_dictionary::lookup_team(left, Some(sport));
+            let team_b = super::team_dictionary::lookup_team(right, Some(sport));
+
+            if team_a.is_some() || team_b.is_some() {
+                return (team_a, team_b);
+            }
+        }
+    }
+
+    // Also try on the original (un-cleaned) lowercase
     for sep in separators {
         if let Some(idx) = lower.find(sep) {
-            let left = &title[..idx].trim();
-            let right = &title[idx + sep.len()..].trim();
+            let left = lower[..idx].trim();
+            let right = lower[idx + sep.len()..].trim();
+            let right = right.trim_end_matches(|c: char| !c.is_alphanumeric() && c != '\'' && c != '-');
 
             let team_a = super::team_dictionary::lookup_team(left, Some(sport));
             let team_b = super::team_dictionary::lookup_team(right, Some(sport));
@@ -151,7 +177,7 @@ pub fn extract_teams_from_title(title: &str, sport: Sport) -> (Option<String>, O
     let tokens: Vec<&str> = lower.split_whitespace().collect();
 
     // Try multi-word combinations (longest first)
-    for window_size in (1..=4).rev() {
+    for window_size in (1..=5).rev() {
         for window in tokens.windows(window_size) {
             let phrase = window.join(" ");
             if let Some(abbrev) = super::team_dictionary::lookup_team(&phrase, Some(sport)) {
@@ -251,5 +277,108 @@ mod tests {
         let (a, b) = extract_teams_from_title("Los Angeles Lakers vs Boston Celtics", Sport::Nba);
         assert_eq!(a.as_deref(), Some("LAL"));
         assert_eq!(b.as_deref(), Some("BOS"));
+    }
+
+    // ── Real-world Polymarket title formats ────────────────────────
+    #[test]
+    fn test_polymarket_will_beat_pattern() {
+        let (a, b) = extract_teams_from_title("Will the Lakers beat the Celtics?", Sport::Nba);
+        assert_eq!(a.as_deref(), Some("LAL"));
+        assert_eq!(b.as_deref(), Some("BOS"));
+    }
+
+    #[test]
+    fn test_polymarket_vs_dot_separator() {
+        let (a, b) = extract_teams_from_title("Lakers vs. Celtics", Sport::Nba);
+        assert_eq!(a.as_deref(), Some("LAL"));
+        assert_eq!(b.as_deref(), Some("BOS"));
+    }
+
+    #[test]
+    fn test_polymarket_nhl_matchup() {
+        let (a, b) = extract_teams_from_title("Maple Leafs vs Bruins", Sport::Nhl);
+        assert_eq!(a.as_deref(), Some("TOR"));
+        assert_eq!(b.as_deref(), Some("BOS"));
+    }
+
+    #[test]
+    fn test_polymarket_nhl_full_name() {
+        let (a, b) = extract_teams_from_title("Toronto Maple Leafs vs Boston Bruins", Sport::Nhl);
+        assert_eq!(a.as_deref(), Some("TOR"));
+        assert_eq!(b.as_deref(), Some("BOS"));
+    }
+
+    #[test]
+    fn test_cbb_duke_unc() {
+        let (a, b) = extract_teams_from_title("Duke vs North Carolina", Sport::Cbb);
+        assert_eq!(a.as_deref(), Some("DUK"));
+        assert_eq!(b.as_deref(), Some("UNC"));
+    }
+
+    #[test]
+    fn test_cbb_full_names() {
+        let (a, b) = extract_teams_from_title("Duke Blue Devils vs UNC Tar Heels", Sport::Cbb);
+        assert_eq!(a.as_deref(), Some("DUK"));
+        assert_eq!(b.as_deref(), Some("UNC"));
+    }
+
+    #[test]
+    fn test_cbb_gonzaga_vs_alabama() {
+        let (a, b) = extract_teams_from_title("Gonzaga Bulldogs vs Alabama Crimson Tide", Sport::Cbb);
+        assert_eq!(a.as_deref(), Some("GONZ"));
+        assert_eq!(b.as_deref(), Some("ALA"));
+    }
+
+    #[test]
+    fn test_nfl_full_names() {
+        let (a, b) = extract_teams_from_title("Kansas City Chiefs vs San Francisco 49ers", Sport::Nfl);
+        assert_eq!(a.as_deref(), Some("KC"));
+        assert_eq!(b.as_deref(), Some("SF"));
+    }
+
+    #[test]
+    fn test_mlb_matchup() {
+        let (a, b) = extract_teams_from_title("New York Yankees vs Los Angeles Dodgers", Sport::Mlb);
+        assert_eq!(a.as_deref(), Some("NYY"));
+        assert_eq!(b.as_deref(), Some("LAD"));
+    }
+
+    #[test]
+    fn test_nhl_golden_knights_vs_oilers() {
+        let (a, b) = extract_teams_from_title("Vegas Golden Knights vs Edmonton Oilers", Sport::Nhl);
+        assert_eq!(a.as_deref(), Some("VGK"));
+        assert_eq!(b.as_deref(), Some("EDM"));
+    }
+
+    #[test]
+    fn test_polymarket_at_separator() {
+        let (a, b) = extract_teams_from_title("Lakers at Celtics", Sport::Nba);
+        assert_eq!(a.as_deref(), Some("LAL"));
+        assert_eq!(b.as_deref(), Some("BOS"));
+    }
+
+    #[test]
+    fn test_title_with_date_suffix() {
+        let (a, b) = extract_teams_from_title("Lakers vs Celtics (2026-03-15)", Sport::Nba);
+        assert_eq!(a.as_deref(), Some("LAL"));
+        assert_eq!(b.as_deref(), Some("BOS"));
+    }
+
+    #[test]
+    fn test_kalshi_ticker_nba_date() {
+        let date = extract_date_from_kalshi_ticker("KXNBAGAME-26MAR15LALBOS-LAL");
+        assert_eq!(date, NaiveDate::from_ymd_opt(2026, 3, 15));
+    }
+
+    #[test]
+    fn test_kalshi_ticker_nhl_date() {
+        let date = extract_date_from_kalshi_ticker("KXNHLGAME-26MAR15TORTB-TOR");
+        assert_eq!(date, NaiveDate::from_ymd_opt(2026, 3, 15));
+    }
+
+    #[test]
+    fn test_kalshi_ticker_cbb_date() {
+        let date = extract_date_from_kalshi_ticker("KXCBBGAME-26MAR15DUKUNC-DUK");
+        assert_eq!(date, NaiveDate::from_ymd_opt(2026, 3, 15));
     }
 }

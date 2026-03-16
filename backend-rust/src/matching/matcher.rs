@@ -575,4 +575,202 @@ mod tests {
         }).collect();
         assert_eq!(matched.len(), 0, "Different sports should not match");
     }
+
+    // ── Real-world integration tests ─────────────────────────────
+
+    #[test]
+    fn test_nba_full_slate_matching() {
+        let date = NaiveDate::from_ymd_opt(2026, 3, 15);
+        let kalshi = vec![
+            make_kalshi("NBA: LAL vs BOS", Sport::Nba, date, Some("LAL"), Some("BOS"),
+                vec!["KXNBAGAME-26MAR15LALBOS-LAL", "KXNBAGAME-26MAR15LALBOS-BOS"]),
+            make_kalshi("NBA: MIA vs DEN", Sport::Nba, date, Some("MIA"), Some("DEN"),
+                vec!["KXNBAGAME-26MAR15MIADEN-MIA", "KXNBAGAME-26MAR15MIADEN-DEN"]),
+            make_kalshi("NBA: GSW vs PHX", Sport::Nba, date, Some("GSW"), Some("PHX"),
+                vec!["KXNBAGAME-26MAR15GSWPHX-GSW", "KXNBAGAME-26MAR15GSWPHX-PHX"]),
+            make_kalshi("NBA: NYK vs CHI", Sport::Nba, date, Some("NYK"), Some("CHI"),
+                vec!["KXNBAGAME-26MAR15NYKCHI-NYK", "KXNBAGAME-26MAR15NYKCHI-CHI"]),
+        ];
+        let poly = vec![
+            make_poly("Los Angeles Lakers vs Boston Celtics", Sport::Nba, date,
+                Some("LAL"), Some("BOS"), "lakers-celtics"),
+            make_poly("Miami Heat vs Denver Nuggets", Sport::Nba, date,
+                Some("MIA"), Some("DEN"), "heat-nuggets"),
+            make_poly("Golden State Warriors vs Phoenix Suns", Sport::Nba, date,
+                Some("GSW"), Some("PHX"), "warriors-suns"),
+            make_poly("New York Knicks vs Chicago Bulls", Sport::Nba, date,
+                Some("NYK"), Some("CHI"), "knicks-bulls"),
+        ];
+
+        let events = match_candidates(kalshi, poly, Some(60.0));
+        let matched: Vec<_> = events.iter().filter(|e| {
+            !e.platform_ids.kalshi_market_tickers.is_empty()
+                && !e.platform_ids.polymarket_token_ids.is_empty()
+        }).collect();
+        assert_eq!(matched.len(), 4, "All 4 NBA games should match, got {}", matched.len());
+    }
+
+    #[test]
+    fn test_nhl_matching_with_date() {
+        let date = NaiveDate::from_ymd_opt(2026, 3, 15);
+        let kalshi = vec![
+            make_kalshi("NHL: TOR vs BOS", Sport::Nhl, date, Some("TOR"), Some("BOS"),
+                vec!["KXNHLGAME-26MAR15TORBOS-TOR", "KXNHLGAME-26MAR15TORBOS-BOS"]),
+            make_kalshi("NHL: VGK vs EDM", Sport::Nhl, date, Some("VGK"), Some("EDM"),
+                vec!["KXNHLGAME-26MAR15VGKEDM-VGK", "KXNHLGAME-26MAR15VGKEDM-EDM"]),
+        ];
+        let poly = vec![
+            make_poly("Toronto Maple Leafs vs Boston Bruins", Sport::Nhl, date,
+                Some("TOR"), Some("BOS"), "leafs-bruins"),
+            make_poly("Vegas Golden Knights vs Edmonton Oilers", Sport::Nhl, date,
+                Some("VGK"), Some("EDM"), "knights-oilers"),
+        ];
+
+        let events = match_candidates(kalshi, poly, Some(60.0));
+        let matched: Vec<_> = events.iter().filter(|e| {
+            !e.platform_ids.kalshi_market_tickers.is_empty()
+                && !e.platform_ids.polymarket_token_ids.is_empty()
+        }).collect();
+        assert_eq!(matched.len(), 2, "Both NHL games should match, got {}", matched.len());
+    }
+
+    #[test]
+    fn test_cbb_matching() {
+        let date = NaiveDate::from_ymd_opt(2026, 3, 15);
+        let kalshi = vec![
+            make_kalshi("CBB: DUK vs UNC", Sport::Cbb, date, Some("DUK"), Some("UNC"),
+                vec!["KXCBBGAME-26MAR15DUKUNC-DUK", "KXCBBGAME-26MAR15DUKUNC-UNC"]),
+            make_kalshi("CBB: GONZ vs ALA", Sport::Cbb, date, Some("GONZ"), Some("ALA"),
+                vec!["KXCBBGAME-26MAR15GONZALA-GONZ", "KXCBBGAME-26MAR15GONZALA-ALA"]),
+        ];
+        let poly = vec![
+            make_poly("Duke vs North Carolina", Sport::Cbb, date,
+                Some("DUK"), Some("UNC"), "duke-unc"),
+            make_poly("Gonzaga Bulldogs vs Alabama Crimson Tide", Sport::Cbb, date,
+                Some("GONZ"), Some("ALA"), "gonzaga-alabama"),
+        ];
+
+        let events = match_candidates(kalshi, poly, Some(60.0));
+        let matched: Vec<_> = events.iter().filter(|e| {
+            !e.platform_ids.kalshi_market_tickers.is_empty()
+                && !e.platform_ids.polymarket_token_ids.is_empty()
+        }).collect();
+        assert_eq!(matched.len(), 2, "Both CBB games should match, got {}", matched.len());
+    }
+
+    #[test]
+    fn test_cross_bucket_date_mismatch_still_matches() {
+        // Polymarket has no date, Kalshi has date — should match via cross-bucket
+        let date = NaiveDate::from_ymd_opt(2026, 3, 15);
+        let kalshi = vec![
+            make_kalshi("NBA: LAL vs BOS", Sport::Nba, date, Some("LAL"), Some("BOS"),
+                vec!["KXNBAGAME-26MAR15LALBOS-LAL", "KXNBAGAME-26MAR15LALBOS-BOS"]),
+        ];
+        let poly = vec![
+            make_poly("Los Angeles Lakers vs Boston Celtics", Sport::Nba, None,
+                Some("LAL"), Some("BOS"), "lakers-celtics"),
+        ];
+
+        let events = match_candidates(kalshi, poly, Some(60.0));
+        let matched: Vec<_> = events.iter().filter(|e| {
+            !e.platform_ids.kalshi_market_tickers.is_empty()
+                && !e.platform_ids.polymarket_token_ids.is_empty()
+        }).collect();
+        assert_eq!(matched.len(), 1, "Should match via cross-bucket fallback");
+    }
+
+    #[test]
+    fn test_reversed_team_order_matches() {
+        // Polymarket lists "Celtics vs Lakers" while Kalshi lists "LAL vs BOS"
+        let date = NaiveDate::from_ymd_opt(2026, 3, 15);
+        let kalshi = vec![
+            make_kalshi("NBA: LAL vs BOS", Sport::Nba, date, Some("LAL"), Some("BOS"),
+                vec!["KXNBAGAME-26MAR15LALBOS-LAL", "KXNBAGAME-26MAR15LALBOS-BOS"]),
+        ];
+        let poly = vec![
+            make_poly("Boston Celtics vs Los Angeles Lakers", Sport::Nba, date,
+                Some("BOS"), Some("LAL"), "celtics-lakers"),
+        ];
+
+        let events = match_candidates(kalshi, poly, Some(60.0));
+        let matched: Vec<_> = events.iter().filter(|e| {
+            !e.platform_ids.kalshi_market_tickers.is_empty()
+                && !e.platform_ids.polymarket_token_ids.is_empty()
+        }).collect();
+        assert_eq!(matched.len(), 1, "Reversed team order should still match");
+    }
+
+    #[test]
+    fn test_mixed_sports_correct_pairing() {
+        let date = NaiveDate::from_ymd_opt(2026, 3, 15);
+        let kalshi = vec![
+            make_kalshi("NBA: LAL vs BOS", Sport::Nba, date, Some("LAL"), Some("BOS"),
+                vec!["KXNBAGAME-26MAR15LALBOS-LAL", "KXNBAGAME-26MAR15LALBOS-BOS"]),
+            make_kalshi("NHL: TOR vs BOS", Sport::Nhl, date, Some("TOR"), Some("BOS"),
+                vec!["KXNHLGAME-26MAR15TORBOS-TOR", "KXNHLGAME-26MAR15TORBOS-BOS"]),
+        ];
+        let poly = vec![
+            make_poly("Toronto Maple Leafs vs Boston Bruins", Sport::Nhl, date,
+                Some("TOR"), Some("BOS"), "leafs-bruins"),
+            make_poly("Los Angeles Lakers vs Boston Celtics", Sport::Nba, date,
+                Some("LAL"), Some("BOS"), "lakers-celtics"),
+        ];
+
+        let events = match_candidates(kalshi, poly, Some(60.0));
+        let matched: Vec<_> = events.iter().filter(|e| {
+            !e.platform_ids.kalshi_market_tickers.is_empty()
+                && !e.platform_ids.polymarket_token_ids.is_empty()
+        }).collect();
+        assert_eq!(matched.len(), 2, "Both games should match to their correct sport");
+        // NBA game should not match with NHL game
+        for e in &matched {
+            let has_nba_ticker = e.platform_ids.kalshi_market_tickers.iter().any(|t| t.contains("NBA"));
+            let has_nhl_ticker = e.platform_ids.kalshi_market_tickers.iter().any(|t| t.contains("NHL"));
+            let has_nba_slug = e.platform_ids.polymarket_market_slug.as_deref() == Some("lakers-celtics");
+            let has_nhl_slug = e.platform_ids.polymarket_market_slug.as_deref() == Some("leafs-bruins");
+            if has_nba_ticker {
+                assert!(has_nba_slug, "NBA Kalshi should pair with NBA Polymarket");
+            }
+            if has_nhl_ticker {
+                assert!(has_nhl_slug, "NHL Kalshi should pair with NHL Polymarket");
+            }
+        }
+    }
+
+    #[test]
+    fn test_large_slate_no_false_matches() {
+        let date = NaiveDate::from_ymd_opt(2026, 3, 15);
+        let kalshi = vec![
+            make_kalshi("NBA: LAL vs BOS", Sport::Nba, date, Some("LAL"), Some("BOS"),
+                vec!["KXNBA-LAL", "KXNBA-BOS"]),
+            make_kalshi("NBA: MIA vs DEN", Sport::Nba, date, Some("MIA"), Some("DEN"),
+                vec!["KXNBA-MIA", "KXNBA-DEN"]),
+            make_kalshi("NBA: GSW vs PHX", Sport::Nba, date, Some("GSW"), Some("PHX"),
+                vec!["KXNBA-GSW", "KXNBA-PHX"]),
+            make_kalshi("NBA: NYK vs CHI", Sport::Nba, date, Some("NYK"), Some("CHI"),
+                vec!["KXNBA-NYK", "KXNBA-CHI"]),
+            make_kalshi("NBA: DAL vs MIL", Sport::Nba, date, Some("DAL"), Some("MIL"),
+                vec!["KXNBA-DAL", "KXNBA-MIL"]),
+        ];
+        let poly = vec![
+            make_poly("Lakers vs Celtics", Sport::Nba, date, Some("LAL"), Some("BOS"), "lakers-celtics"),
+            make_poly("Heat vs Nuggets", Sport::Nba, date, Some("MIA"), Some("DEN"), "heat-nuggets"),
+            make_poly("Warriors vs Suns", Sport::Nba, date, Some("GSW"), Some("PHX"), "warriors-suns"),
+            make_poly("Knicks vs Bulls", Sport::Nba, date, Some("NYK"), Some("CHI"), "knicks-bulls"),
+            make_poly("Mavericks vs Bucks", Sport::Nba, date, Some("DAL"), Some("MIL"), "mavs-bucks"),
+        ];
+
+        let events = match_candidates(kalshi, poly, Some(60.0));
+        let matched: Vec<_> = events.iter().filter(|e| {
+            !e.platform_ids.kalshi_market_tickers.is_empty()
+                && !e.platform_ids.polymarket_token_ids.is_empty()
+        }).collect();
+        assert_eq!(matched.len(), 5, "All 5 NBA games should match correctly");
+        // No single-platform events should remain
+        let single: Vec<_> = events.iter().filter(|e| {
+            e.platform_ids.kalshi_market_tickers.is_empty()
+                || e.platform_ids.polymarket_token_ids.is_empty()
+        }).collect();
+        assert_eq!(single.len(), 0, "No unmatched events should remain");
+    }
 }

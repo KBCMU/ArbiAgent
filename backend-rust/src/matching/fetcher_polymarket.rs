@@ -27,6 +27,10 @@ struct GammaEvent {
     volume: Option<f64>,
     markets: Option<Vec<GammaMarket>>,
     tags: Option<Vec<GammaTag>>,
+    #[serde(rename = "endDate")]
+    end_date: Option<String>,
+    #[serde(rename = "startDate")]
+    start_date: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,18 +126,32 @@ async fn fetch_gamma_events_by_tag(
     client: &Client,
     tag: &str,
 ) -> anyhow::Result<Vec<GammaEvent>> {
-    let url = format!(
-        "{}/events?tag={}&closed=false&limit=100&order=volume24hr&ascending=false",
-        POLYMARKET_GAMMA_BASE, tag,
-    );
+    let mut all_events = Vec::new();
+    let page_size = 100;
+    let max_pages = 5;
 
-    let resp = client.get(&url).send().await?;
-    if !resp.status().is_success() {
-        anyhow::bail!("Gamma API returned {}", resp.status());
+    for page in 0..max_pages {
+        let offset = page * page_size;
+        let url = format!(
+            "{}/events?tag={}&closed=false&limit={}&offset={}&order=volume24hr&ascending=false",
+            POLYMARKET_GAMMA_BASE, tag, page_size, offset,
+        );
+
+        let resp = client.get(&url).send().await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("Gamma API returned {}", resp.status());
+        }
+
+        let events: Vec<GammaEvent> = resp.json().await?;
+        let count = events.len();
+        all_events.extend(events);
+
+        if count < page_size {
+            break;
+        }
     }
 
-    let events: Vec<GammaEvent> = resp.json().await?;
-    Ok(events)
+    Ok(all_events)
 }
 
 /// Process a batch of Gamma events into CandidateEvents, filtering to the
@@ -171,8 +189,10 @@ fn process_gamma_events(events: Vec<GammaEvent>, sports: &[Sport]) -> Vec<Candid
         // Extract teams from title
         let (team_a, team_b) = candidate::extract_teams_from_title(&title, sport);
 
-        // Extract date from title
-        let game_date = candidate::extract_date_from_title(&title);
+        // Extract date: prefer end_date from Gamma API, fall back to title
+        let game_date = parse_gamma_date(event.end_date.as_deref())
+            .or_else(|| parse_gamma_date(event.start_date.as_deref()))
+            .or_else(|| candidate::extract_date_from_title(&title));
 
         let normalized_title = candidate::normalize_title(&title);
 
@@ -298,4 +318,91 @@ fn extract_moneyline_market(event: &GammaEvent) -> (Vec<String>, Vec<String>, bo
         .unwrap_or_default();
 
     (token_ids, outcome_labels, is_moneyline)
+}
+
+/// Parse an ISO-8601 datetime string from Gamma API into a NaiveDate.
+/// Handles formats like "2026-03-15T00:00:00Z" and "2026-03-15".
+fn parse_gamma_date(s: Option<&str>) -> Option<chrono::NaiveDate> {
+    let s = s?.trim();
+    if s.is_empty() {
+        return None;
+    }
+    // Try full ISO-8601 with time
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        return Some(dt.date_naive());
+    }
+    // Try "YYYY-MM-DDT..." by taking first 10 chars
+    if s.len() >= 10 {
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(&s[..10], "%Y-%m-%d") {
+            return Some(d);
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_gamma_date_rfc3339() {
+        let d = parse_gamma_date(Some("2026-03-15T23:30:00Z"));
+        assert_eq!(d, chrono::NaiveDate::from_ymd_opt(2026, 3, 15));
+    }
+
+    #[test]
+    fn test_parse_gamma_date_date_only() {
+        let d = parse_gamma_date(Some("2026-03-15"));
+        assert_eq!(d, chrono::NaiveDate::from_ymd_opt(2026, 3, 15));
+    }
+
+    #[test]
+    fn test_parse_gamma_date_with_offset() {
+        let d = parse_gamma_date(Some("2026-03-15T19:00:00-04:00"));
+        assert_eq!(d, chrono::NaiveDate::from_ymd_opt(2026, 3, 15));
+    }
+
+    #[test]
+    fn test_parse_gamma_date_none() {
+        assert_eq!(parse_gamma_date(None), None);
+        assert_eq!(parse_gamma_date(Some("")), None);
+    }
+
+    #[test]
+    fn test_classify_sport_nba() {
+        let event = GammaEvent {
+            slug: Some("lakers-celtics".into()),
+            title: Some("Lakers vs Celtics".into()),
+            closed: Some(false),
+            active: Some(true),
+            volume: None,
+            markets: None,
+            tags: Some(vec![GammaTag {
+                label: Some("NBA".into()),
+                slug: Some("nba".into()),
+            }]),
+            end_date: None,
+            start_date: None,
+        };
+        assert_eq!(classify_sport_from_tags(&event), Sport::Nba);
+    }
+
+    #[test]
+    fn test_classify_sport_from_title_fallback() {
+        let event = GammaEvent {
+            slug: Some("lakers-celtics".into()),
+            title: Some("NBA: Lakers vs Celtics".into()),
+            closed: Some(false),
+            active: Some(true),
+            volume: None,
+            markets: None,
+            tags: Some(vec![GammaTag {
+                label: Some("Sports".into()),
+                slug: Some("sports".into()),
+            }]),
+            end_date: None,
+            start_date: None,
+        };
+        assert_eq!(classify_sport_from_tags(&event), Sport::Nba);
+    }
 }
