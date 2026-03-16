@@ -181,7 +181,18 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
                 event.platform_ids.polymarket_outcome_labels = resolved;
             }
         } else if is_cached && !token_ids_changed {
-            // Labels are good AND token_ids unchanged — skip
+            // Labels are good AND token_ids unchanged — but check if the fetcher
+            // has normalized labels (e.g. "Bruins" → "BOS") that differ from cache.
+            let cached_labels = state.cache.events.get(&event.id)
+                .map(|c| c.platform_ids.polymarket_outcome_labels.clone())
+                .unwrap_or_default();
+            if cached_labels != event.platform_ids.polymarket_outcome_labels {
+                state.cache.upsert_event(event.clone());
+                if let Err(e) = state.db.upsert_event(&event).await {
+                    warn!("DB write skipped for {}: {}", event.id, e);
+                }
+                relabeled_count += 1;
+            }
             continue;
         }
 

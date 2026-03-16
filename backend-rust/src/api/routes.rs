@@ -74,6 +74,18 @@ async fn list_events(
             if outcome_count != 2 {
                 return false;
             }
+            // For sports events: reject any that still have generic Yes/No labels
+            // (these are futures events that slipped through upstream filters)
+            if event.sport.is_sport() {
+                let labels = &event.platform_ids.polymarket_outcome_labels;
+                let all_generic = !labels.is_empty()
+                    && labels.iter().all(|l| {
+                        l.eq_ignore_ascii_case("yes") || l.eq_ignore_ascii_case("no")
+                    });
+                if all_generic {
+                    return false;
+                }
+            }
             // Skip events whose game date has already passed
             if is_event_past(&event.id) {
                 return false;

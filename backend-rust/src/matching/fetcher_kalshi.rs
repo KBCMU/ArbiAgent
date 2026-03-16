@@ -130,8 +130,16 @@ fn kalshi_event_to_candidate(event: KalshiEvent, sport: Sport) -> Option<Candida
     // Spread/O-U markets have different structures
     let is_moneyline = active_tickers.len() == 2;
 
-    // Extract teams from market tickers (most reliable for Kalshi)
-    let (team_a, team_b) = candidate::extract_teams_from_kalshi_tickers(&active_tickers);
+    // Extract teams from market tickers (most reliable for Kalshi),
+    // then normalize through the team dictionary so Kalshi abbreviations
+    // like "NJ" become canonical "NJD" that match Polymarket labels.
+    let (team_a_raw, team_b_raw) = candidate::extract_teams_from_kalshi_tickers(&active_tickers);
+    let team_a = team_a_raw.map(|t| {
+        team_dictionary::lookup_team(&t, Some(sport)).unwrap_or(t)
+    });
+    let team_b = team_b_raw.map(|t| {
+        team_dictionary::lookup_team(&t, Some(sport)).unwrap_or(t)
+    });
 
     // Extract date from ticker or title
     let game_date = active_tickers

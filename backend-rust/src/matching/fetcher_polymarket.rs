@@ -180,6 +180,12 @@ fn process_gamma_events(events: Vec<GammaEvent>, sports: &[Sport]) -> Vec<Candid
             continue;
         }
 
+        // Skip championship/futures events — they have >2 real outcomes
+        // but can slip through as binary Yes/No markets
+        if is_futures_event(&title) {
+            continue;
+        }
+
         // Extract token IDs and outcome labels from the moneyline market
         let (token_ids, mut outcome_labels, is_moneyline) = extract_moneyline_market(&event);
         if token_ids.is_empty() {
@@ -200,6 +206,16 @@ fn process_gamma_events(events: Vec<GammaEvent>, sports: &[Sport]) -> Vec<Candid
                 outcome_labels = vec![a.clone(), b.clone()];
             }
         }
+
+        // Normalize ALL outcome labels to canonical abbreviations so they
+        // match Kalshi labels (e.g. "Bruins" → "BOS", "Devils" → "NJD").
+        outcome_labels = outcome_labels
+            .iter()
+            .map(|label| {
+                team_dictionary::lookup_team(label, Some(sport))
+                    .unwrap_or_else(|| label.clone())
+            })
+            .collect();
 
         // Extract date: prefer end_date from Gamma API, fall back to title
         let game_date = parse_gamma_date(event.end_date.as_deref())
@@ -402,7 +418,26 @@ fn extract_moneyline_market(event: &GammaEvent) -> (Vec<String>, Vec<String>, bo
         }
     }
 
-    // Strategy 3: fallback — first active market (original behavior)
+    // Before Strategy 3 fallback: count how many team-like markets exist.
+    // If >2, this is a multi-outcome event (e.g. "Who wins the NBA Championship")
+    // that should NOT be treated as a binary market.
+    let all_team_market_count = active_markets
+        .iter()
+        .filter(|m| {
+            let title = m.group_item_title.as_deref().unwrap_or("");
+            if title.is_empty() {
+                return false;
+            }
+            let lower = title.to_lowercase();
+            !(lower.contains("winner") || lower.contains("moneyline") || lower.contains("spread")
+                || lower.contains("over") || lower.contains("under") || lower.contains("total"))
+        })
+        .count();
+    if all_team_market_count > 2 {
+        return (vec![], vec![], false);
+    }
+
+    // Strategy 3: fallback — first active market (only for genuine binary events)
     let market = active_markets[0];
     let token_ids: Vec<String> = market
         .clob_token_ids
@@ -425,6 +460,22 @@ fn extract_moneyline_market(event: &GammaEvent) -> (Vec<String>, Vec<String>, bo
     };
 
     (token_ids, outcome_labels, is_moneyline)
+}
+
+/// Returns true if the event title indicates a championship, award, or other
+/// futures market that inherently has more than 2 real outcomes.
+fn is_futures_event(title: &str) -> bool {
+    let lower = title.to_lowercase();
+    lower.contains("champion") || lower.contains("mvp")
+        || lower.contains("win the 20") // "win the 2026 ..."
+        || lower.contains("make the playoffs")
+        || lower.contains("win the series")
+        || lower.contains("award")
+        || lower.contains("rookie of")
+        || lower.contains("defensive player")
+        || lower.contains("most valuable")
+        || lower.contains("cy young")
+        || lower.contains("heisman")
 }
 
 /// Parse an ISO-8601 datetime string from Gamma API into a NaiveDate.
@@ -738,7 +789,7 @@ mod tests {
         assert_eq!(c.sport, Sport::Nba);
         assert_eq!(c.polymarket_slug.as_deref(), Some("nba-gsw-nyk-2026-03-15"));
         assert_eq!(c.polymarket_token_ids, vec!["tok_gsw", "tok_nyk"]);
-        assert_eq!(c.polymarket_outcome_labels, vec!["Warriors", "Knicks"]);
+        assert_eq!(c.polymarket_outcome_labels, vec!["GSW", "NYK"]);
         assert!(c.is_moneyline);
         // Outcome labels should NOT be "Yes"/"No"
         assert!(
@@ -790,5 +841,83 @@ mod tests {
 
         assert_eq!(candidates.len(), 1, "Should only include the NBA event");
         assert_eq!(candidates[0].sport, Sport::Nba);
+    }
+
+    #[test]
+    fn test_is_futures_event() {
+        assert!(is_futures_event("Who will win the 2026 NBA Championship?"));
+        assert!(is_futures_event("NBA MVP Award 2026"));
+        assert!(is_futures_event("Will the Lakers make the playoffs?"));
+        assert!(is_futures_event("Cy Young Award Winner"));
+        assert!(is_futures_event("Heisman Trophy 2026"));
+        assert!(!is_futures_event("Lakers vs. Celtics"));
+        assert!(!is_futures_event("Warriors vs. Knicks"));
+        assert!(!is_futures_event("Bruins vs. Devils"));
+    }
+
+    #[test]
+    fn test_futures_event_filtered_out() {
+        let futures_event = GammaEvent {
+            slug: Some("nba-champion-2026".into()),
+            title: Some("Who will win the 2026 NBA Championship?".into()),
+            closed: Some(false),
+            active: Some(true),
+            volume: None,
+            markets: Some(vec![
+                make_market(Some("Los Angeles Lakers"), &["Yes", "No"], &["tok1_y", "tok1_n"]),
+                make_market(Some("Boston Celtics"), &["Yes", "No"], &["tok2_y", "tok2_n"]),
+                make_market(Some("Denver Nuggets"), &["Yes", "No"], &["tok3_y", "tok3_n"]),
+                make_market(Some("Milwaukee Bucks"), &["Yes", "No"], &["tok4_y", "tok4_n"]),
+            ]),
+            tags: Some(vec![
+                GammaTag { label: Some("NBA".into()), slug: Some("nba".into()) },
+            ]),
+            end_date: None,
+            start_date: None,
+        };
+
+        let sports = vec![Sport::Nba];
+        let candidates = process_gamma_events(vec![futures_event], &sports);
+        assert_eq!(candidates.len(), 0, "Championship events must be filtered out");
+    }
+
+    #[test]
+    fn test_multi_team_market_rejected_by_strategy3() {
+        let multi_event = make_event_with_markets(vec![
+            make_market(Some("Team A"), &["Yes", "No"], &["tok_a_y", "tok_a_n"]),
+            make_market(Some("Team B"), &["Yes", "No"], &["tok_b_y", "tok_b_n"]),
+            make_market(Some("Team C"), &["Yes", "No"], &["tok_c_y", "tok_c_n"]),
+            make_market(Some("Team D"), &["Yes", "No"], &["tok_d_y", "tok_d_n"]),
+        ]);
+        let (ids, _labels, _is_ml) = extract_moneyline_market(&multi_event);
+        assert!(ids.is_empty(), "Events with >2 team markets should be rejected");
+    }
+
+    #[test]
+    fn test_outcome_labels_normalized_to_abbreviations() {
+        let event = GammaEvent {
+            slug: Some("nhl-bos-njd-2026-03-15".into()),
+            title: Some("Bruins vs. Devils".into()),
+            closed: Some(false),
+            active: Some(true),
+            volume: None,
+            markets: Some(vec![
+                make_market(None, &["Bruins", "Devils"], &["tok_bos", "tok_njd"]),
+            ]),
+            tags: Some(vec![
+                GammaTag { label: Some("NHL".into()), slug: Some("nhl".into()) },
+            ]),
+            end_date: Some("2026-03-15T23:00:00Z".into()),
+            start_date: None,
+        };
+
+        let sports = vec![Sport::Nhl];
+        let candidates = process_gamma_events(vec![event], &sports);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].polymarket_outcome_labels,
+            vec!["BOS", "NJD"],
+            "Outcome labels must be canonical abbreviations"
+        );
     }
 }
