@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use chrono::{NaiveDate, Utc};
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::models::event::{CanonicalEvent, PlatformIds, Sport};
 
@@ -53,6 +53,20 @@ pub fn match_candidates(
 ) -> MatchResult {
     let min_score = min_score.unwrap_or(DEFAULT_MIN_SCORE);
     let now = Utc::now();
+
+    // Log candidate summaries for diagnostics
+    for c in &kalshi_candidates {
+        debug!(
+            "Kalshi candidate: sport={}, teams={:?}/{:?}, date={:?}, mkt={:?}, title={}",
+            c.sport.as_str(), c.team_a, c.team_b, c.game_date, c.market_type, c.raw_title
+        );
+    }
+    for c in &poly_candidates {
+        debug!(
+            "Poly candidate: sport={}, teams={:?}/{:?}, date={:?}, mkt={:?}, title={}",
+            c.sport.as_str(), c.team_a, c.team_b, c.game_date, c.market_type, c.raw_title
+        );
+    }
 
     // Bucket by (sport, date) for efficient matching
     let kalshi_buckets = bucket_by_sport_date_market(&kalshi_candidates);
@@ -163,6 +177,11 @@ pub fn match_candidates(
             results.push(build_single_platform_event(c, &now));
 
             let best = best_rejected_score(c, &poly_candidates, min_score);
+            debug!(
+                "Unmatched Kalshi: {} (teams={:?}/{:?}, date={:?}) best_cross={:?}",
+                c.raw_title, c.team_a, c.team_b, c.game_date,
+                best.as_ref().map(|(s, t)| format!("{:.0} vs {}", s, t)),
+            );
             unmatched_details.push(UnmatchedDetail {
                 event_title: c.raw_title.clone(),
                 platform: "kalshi".to_string(),
@@ -177,6 +196,11 @@ pub fn match_candidates(
             results.push(build_single_platform_event(c, &now));
 
             let best = best_rejected_score(c, &kalshi_candidates, min_score);
+            debug!(
+                "Unmatched Poly: {} (teams={:?}/{:?}, date={:?}) best_cross={:?}",
+                c.raw_title, c.team_a, c.team_b, c.game_date,
+                best.as_ref().map(|(s, t)| format!("{:.0} vs {}", s, t)),
+            );
             unmatched_details.push(UnmatchedDetail {
                 event_title: c.raw_title.clone(),
                 platform: "polymarket".to_string(),
@@ -293,10 +317,14 @@ fn score_pair(kalshi: &CandidateEvent, poly: &CandidateEvent) -> f64 {
     );
     score += title_sim * WEIGHT_TITLE_SIMILARITY;
 
-    // Date match bonus (only when both have dates and they agree)
+    // Date match bonus: full points for exact, 75% for ±1 day (timezone edge cases)
     if let (Some(kd), Some(pd)) = (kalshi.game_date, poly.game_date) {
         if kd == pd {
             score += WEIGHT_DATE_MATCH;
+        } else if let Some(diff) = kd.signed_duration_since(pd).num_days().checked_abs() {
+            if diff == 1 {
+                score += WEIGHT_DATE_MATCH * 0.75;
+            }
         }
     }
 
@@ -767,6 +795,28 @@ mod tests {
                 && !e.platform_ids.polymarket_token_ids.is_empty()
         }).collect();
         assert_eq!(matched.len(), 1, "Should match via cross-bucket fallback");
+    }
+
+    #[test]
+    fn test_adjacent_day_date_tolerance_matches() {
+        // Kalshi has date Mar 17, Polymarket has Mar 16 (timezone edge case)
+        let kalshi_date = NaiveDate::from_ymd_opt(2026, 3, 17);
+        let poly_date = NaiveDate::from_ymd_opt(2026, 3, 16);
+        let kalshi = vec![
+            make_kalshi("NBA: LAL vs HOU", Sport::Nba, kalshi_date, Some("LAL"), Some("HOU"),
+                vec!["KXNBAGAME-26MAR17LALHOU-LAL", "KXNBAGAME-26MAR17LALHOU-HOU"]),
+        ];
+        let poly = vec![
+            make_poly("Lakers vs. Rockets", Sport::Nba, poly_date,
+                Some("LAL"), Some("HOU"), "nba-lal-hou-2026-03-16"),
+        ];
+
+        let events = match_candidates(kalshi, poly, Some(60.0)).events;
+        let matched: Vec<_> = events.iter().filter(|e| {
+            !e.platform_ids.kalshi_market_tickers.is_empty()
+                && !e.platform_ids.polymarket_token_ids.is_empty()
+        }).collect();
+        assert_eq!(matched.len(), 1, "±1 day date difference should still match");
     }
 
     #[test]

@@ -1,5 +1,7 @@
 // ─── Frontend Types ──────────────────────────────────────────────────
 
+export type MarketType = "moneyline" | "spread" | "total";
+
 /** Price data for a single outcome on a single platform (cents, 0-100). */
 export interface OutcomeOdds {
     outcome: string;
@@ -26,6 +28,7 @@ export interface MatchedEvent {
     game_start_time: string | null;
     created_at: string;
     status: string;
+    market_type: MarketType;
     kalshi_outcomes: OutcomeOdds[];
     polymarket_outcomes: OutcomeOdds[];
     arb_opportunity: ArbOpportunity | null;
@@ -100,6 +103,20 @@ const API_BASE_URL =
 
 // ─── Transforms ─────────────────────────────────────────────────────
 
+const SPREAD_RE = /[+-]\d+(\.\d+)?$/;
+const TOTAL_RE = /\b(over|under|o\/u)\b/i;
+
+/** Infer market type from outcome names across both platforms. */
+function inferMarketType(outcomes: string[]): MarketType {
+    for (const name of outcomes) {
+        if (TOTAL_RE.test(name)) return "total";
+    }
+    for (const name of outcomes) {
+        if (SPREAD_RE.test(name.trim())) return "spread";
+    }
+    return "moneyline";
+}
+
 /** Convert a Rust platform odds block into OutcomeOdds[] in cents. */
 function transformPlatformOdds(
     platform: RustPlatformOdds | null | undefined,
@@ -115,6 +132,14 @@ function transformPlatformOdds(
 
 /** Transform a raw Rust event response into a frontend MatchedEvent. */
 function transformEvent(rust: RustEventResponse): MatchedEvent {
+    const kalshi_outcomes = transformPlatformOdds(rust.kalshi);
+    const polymarket_outcomes = transformPlatformOdds(rust.polymarket);
+
+    const allOutcomeNames = [
+        ...kalshi_outcomes.map((o) => o.outcome),
+        ...polymarket_outcomes.map((o) => o.outcome),
+    ];
+
     return {
         id: rust.id,
         event_title: rust.event_title,
@@ -122,8 +147,9 @@ function transformEvent(rust: RustEventResponse): MatchedEvent {
         game_start_time: rust.game_start_time ?? null,
         created_at: rust.created_at ?? new Date().toISOString(),
         status: rust.status,
-        kalshi_outcomes: transformPlatformOdds(rust.kalshi),
-        polymarket_outcomes: transformPlatformOdds(rust.polymarket),
+        market_type: inferMarketType(allOutcomeNames),
+        kalshi_outcomes,
+        polymarket_outcomes,
         arb_opportunity: rust.arb_opportunity ?? null,
     };
 }

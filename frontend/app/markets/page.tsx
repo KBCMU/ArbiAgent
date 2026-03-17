@@ -6,7 +6,8 @@ import { Header } from "@/components/Header";
 import { FilterBar, isSportCategory } from "@/components/FilterBar";
 import { EventTable, type ViewMode } from "@/components/EventTable";
 import { ConnectionError } from "@/components/ConnectionError";
-import { fetchMatchedEvents, MatchedEvent } from "@/lib/api";
+import { MarketTypeFilter } from "@/components/MarketTypeFilter";
+import { fetchMatchedEvents, MatchedEvent, type MarketType } from "@/lib/api";
 
 const POLL_INTERVAL_MS = 15_000;
 
@@ -16,6 +17,7 @@ export default function MarketsPage() {
     const [activeStatus, setActiveStatus] = useState("open");
     const [activeCategory, setActiveCategory] = useState("sports");
     const [activeSubCategory, setActiveSubCategory] = useState("all");
+    const [activeMarketType, setActiveMarketType] = useState<MarketType>("moneyline");
     const [searchQuery, setSearchQuery] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<ViewMode>("row");
@@ -63,6 +65,8 @@ export default function MarketsPage() {
         return () => clearInterval(interval);
     }, [loadEvents]);
 
+    const isSportsView = activeCategory === "sports" || isSportCategory(activeCategory);
+
     const filteredEvents = useMemo(() => {
         let result = allEvents;
 
@@ -78,6 +82,10 @@ export default function MarketsPage() {
             }
         }
 
+        if (isSportsView) {
+            result = result.filter((e) => e.market_type === activeMarketType);
+        }
+
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
             result = result.filter((e) =>
@@ -86,7 +94,7 @@ export default function MarketsPage() {
         }
 
         return result;
-    }, [allEvents, activeCategory, activeSubCategory, searchQuery]);
+    }, [allEvents, activeCategory, activeSubCategory, activeMarketType, isSportsView, searchQuery]);
 
     return (
         <div className="flex min-h-screen" style={{ background: 'var(--bg-main)' }}>
@@ -101,14 +109,27 @@ export default function MarketsPage() {
                     onCategoryChange={(val) => {
                         setActiveCategory(val);
                         setActiveSubCategory("all");
+                        setActiveMarketType("moneyline");
                     }}
                     activeSubCategory={activeSubCategory}
-                    onSubCategoryChange={setActiveSubCategory}
+                    onSubCategoryChange={(val) => {
+                        setActiveSubCategory(val);
+                        setActiveMarketType("moneyline");
+                    }}
                     searchQuery={searchQuery}
                     onSearchChange={setSearchQuery}
                     viewMode={viewMode}
                     onViewModeChange={handleViewModeChange}
                 />
+
+                {isSportsView && (
+                    <div className="border-b border-white/10 bg-[#0a0f1a] px-8 py-2.5">
+                        <MarketTypeFilter
+                            value={activeMarketType}
+                            onChange={setActiveMarketType}
+                        />
+                    </div>
+                )}
 
                 <div className={viewMode === "row" ? "" : "p-6"}>
                     {error ? (

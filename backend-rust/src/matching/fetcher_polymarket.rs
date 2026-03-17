@@ -129,7 +129,7 @@ async fn fetch_gamma_events_by_tag(
 ) -> anyhow::Result<Vec<GammaEvent>> {
     let mut all_events = Vec::new();
     let page_size = 100;
-    let max_pages = 5;
+    let max_pages = 10;
 
     for page in 0..max_pages {
         let offset = page * page_size;
