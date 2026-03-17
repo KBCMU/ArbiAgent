@@ -371,31 +371,10 @@ fn validate_and_correct_odds_mapping(event_id: &str, cache: &StateCache) {
         }
     };
 
-    // ── Step 2: perform the swap if needed ────────────────────────────
+    // ── Step 2: warn-only (label swaps are now handled upstream in discover_and_match_sports) ──
     if let Some((outcome_a, outcome_b, straight, crossed)) = swap_info {
-        // 2a. Swap Polymarket odds keys in the cache
-        if let Some(mut odds_entry) = cache.odds.get_mut(event_id) {
-            if let Some(poly_map) = odds_entry.value_mut().platform_odds.get_mut("polymarket") {
-                let pa = poly_map.get(&outcome_a).cloned();
-                let pb = poly_map.get(&outcome_b).cloned();
-                if let (Some(pa), Some(pb)) = (pa, pb) {
-                    poly_map.insert(outcome_a.clone(), pb);
-                    poly_map.insert(outcome_b.clone(), pa);
-                }
-            }
-        }
-
-        // 2b. Swap outcome labels on the event so future WS/REST price
-        //     updates for these token IDs land under the correct name.
-        if let Some(mut event_entry) = cache.events.get_mut(event_id) {
-            let labels = &mut event_entry.value_mut().platform_ids.polymarket_outcome_labels;
-            if labels.len() == 2 {
-                labels.swap(0, 1);
-            }
-        }
-
         warn!(
-            "🔄 Corrected Polymarket labels for {}: swapped {} ↔ {} (straight_gap={:.3}, crossed_gap={:.3})",
+            "⚠️ Possible label misalignment for {}: {} ↔ {} (straight_gap={:.3}, crossed_gap={:.3}) — NOT swapping (handled upstream)",
             event_id, outcome_a, outcome_b, straight, crossed
         );
     }

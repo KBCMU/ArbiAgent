@@ -24,6 +24,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v2/arbitrage", get(list_arbitrage))
         .route("/api/v2/arbitrage/history", get(arb_history))
         .route("/api/v2/arbitrage/stats", get(arb_stats))
+        .route("/api/v2/matching/stats", get(matching_stats))
         .route("/api/v2/sports/{sport}/today", get(sport_today))
 }
 
@@ -296,6 +297,7 @@ fn build_event_response(
         game_start_time: event.game_start_time.map(|t| t.to_rfc3339()),
         created_at: event.created_at.to_rfc3339(),
         status: event.status.clone(),
+        match_score: event.match_score,
         kalshi,
         polymarket,
         arb_opportunity,
@@ -366,6 +368,16 @@ async fn arb_stats(State(state): State<Arc<AppState>>) -> Json<serde_json::Value
     }
 }
 
+async fn matching_stats(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let stats = state.cache.matching_stats.read().unwrap().clone();
+    match stats {
+        Some(s) => Json(serde_json::json!(s)),
+        None => Json(serde_json::json!({
+            "message": "No matching cycle has run yet",
+        })),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,6 +399,7 @@ mod tests {
                 polymarket_token_ids: vec!["p1".to_string(), "p2".to_string()],
                 polymarket_outcome_labels: vec!["BOS".to_string(), "NJD".to_string()],
             },
+            match_score: Some(85.0),
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }

@@ -237,6 +237,7 @@ async fn fetch_matched_events(
                 polymarket_token_ids,
                 polymarket_outcome_labels,
             },
+            match_score: None,
             created_at: now,
             updated_at: now,
         };

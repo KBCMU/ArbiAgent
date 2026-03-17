@@ -116,6 +116,8 @@ pub struct CanonicalEvent {
     pub game_start_time: Option<DateTime<Utc>>,
     pub status: String,
     pub platform_ids: PlatformIds,
+    /// Score (0–100) from the cross-platform matcher. `None` for single-platform events.
+    pub match_score: Option<f64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

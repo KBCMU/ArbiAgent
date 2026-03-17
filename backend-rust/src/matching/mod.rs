@@ -16,6 +16,7 @@
 pub mod candidate;
 pub mod fetcher_kalshi;
 pub mod fetcher_polymarket;
+pub mod hungarian;
 pub mod label_resolver;
 pub mod matcher;
 pub mod shadow;
@@ -82,22 +83,62 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
 
     // Run the matching algorithm
     let min_score = state.config.match_min_score;
-    let events = matcher::match_candidates(
+    let match_result = matcher::match_candidates(
         kalshi_candidates,
         poly_candidates,
         Some(min_score),
     );
 
-    // Count matched (dual-platform) events
-    let matched = events
+    let matched = match_result.matched_pairs;
+    let events = match_result.events;
+    let unmatched_details = match_result.unmatched_details;
+    let total = events.len();
+
+    // Store matching stats for the /api/v2/matching/stats endpoint
+    let avg_score = {
+        let scores: Vec<f64> = events
+            .iter()
+            .filter_map(|e| e.match_score)
+            .collect();
+        if scores.is_empty() {
+            0.0
+        } else {
+            scores.iter().sum::<f64>() / scores.len() as f64
+        }
+    };
+
+    let unmatched_kalshi_count = unmatched_details
         .iter()
-        .filter(|e| {
-            !e.platform_ids.kalshi_market_tickers.is_empty()
-                && !e.platform_ids.polymarket_token_ids.is_empty()
-        })
+        .filter(|d| d.platform == "kalshi")
+        .count();
+    let unmatched_poly_count = unmatched_details
+        .iter()
+        .filter(|d| d.platform == "polymarket")
         .count();
 
-    let total = events.len();
+    {
+        use crate::storage::cache::{MatchingStats, UnmatchedStat};
+        let stats = MatchingStats {
+            last_run_at: chrono::Utc::now(),
+            kalshi_candidates: kalshi_count,
+            polymarket_candidates: poly_count,
+            matched_pairs: matched,
+            unmatched_kalshi: unmatched_kalshi_count,
+            unmatched_polymarket: unmatched_poly_count,
+            avg_match_score: avg_score,
+            unmatched: unmatched_details
+                .into_iter()
+                .map(|d| UnmatchedStat {
+                    event_title: d.event_title,
+                    platform: d.platform,
+                    sport: d.sport,
+                    best_rejected_score: d.best_rejected_score,
+                    best_rejected_title: d.best_rejected_title,
+                })
+                .collect(),
+        };
+        *state.cache.matching_stats.write().unwrap() = Some(stats);
+    }
 
     // Snapshot discovered sports event IDs for stale-ID reconciliation later.
     let discovered_sports_ids: HashSet<String> = events
@@ -179,6 +220,26 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
             });
 
             if resolved_are_real {
+                // Validate alignment: resolved Polymarket labels should match
+                // the set of Kalshi outcomes. If they don't, log a warning.
+                let kalshi_outcomes: HashSet<String> = event
+                    .platform_ids
+                    .kalshi_market_tickers
+                    .iter()
+                    .map(|t| team_dictionary::extract_kalshi_outcome(t))
+                    .collect();
+                let poly_outcomes: HashSet<String> = resolved.iter().cloned().collect();
+
+                if !kalshi_outcomes.is_empty()
+                    && !poly_outcomes.is_empty()
+                    && kalshi_outcomes != poly_outcomes
+                {
+                    warn!(
+                        "Label mismatch for {}: Kalshi={:?} vs Polymarket={:?}",
+                        event.id, kalshi_outcomes, poly_outcomes
+                    );
+                }
+
                 event.platform_ids.polymarket_outcome_labels = resolved;
                 if is_cached {
                     state.cache.clear_platform_odds(&event.id, "polymarket");

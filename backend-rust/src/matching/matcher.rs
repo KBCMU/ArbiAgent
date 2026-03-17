@@ -8,7 +8,7 @@ use tracing::info;
 
 use crate::models::event::{CanonicalEvent, PlatformIds, Sport};
 
-use super::candidate::{self, CandidateEvent, Platform};
+use super::candidate::{self, CandidateEvent, MarketTypeBucket, Platform};
 
 // ─── Scoring Weights ────────────────────────────────────────────────
 
@@ -22,15 +22,27 @@ const WEIGHT_MONEYLINE_MATCH: f64 = 10.0;
 const DEFAULT_MIN_SCORE: f64 = 60.0;
 
 /// A scored pair of candidates.
-struct ScoredPair {
-    kalshi_idx: usize,
-    poly_idx: usize,
-    score: f64,
+/// Detail about an unmatched candidate, including its best rejected cross-platform pair.
+#[derive(Debug, Clone)]
+pub struct UnmatchedDetail {
+    pub event_title: String,
+    pub platform: String,
+    pub sport: String,
+    pub best_rejected_score: Option<f64>,
+    pub best_rejected_title: Option<String>,
+}
+
+/// Result of a matching cycle, including events and diagnostics.
+pub struct MatchResult {
+    pub events: Vec<CanonicalEvent>,
+    pub matched_pairs: usize,
+    pub unmatched_details: Vec<UnmatchedDetail>,
 }
 
 // ─── Public API ─────────────────────────────────────────────────────
 
-/// Match Kalshi and Polymarket candidates, returning `CanonicalEvent`s.
+/// Match Kalshi and Polymarket candidates, returning `CanonicalEvent`s
+/// together with matching diagnostics.
 ///
 /// Matched events contain both platforms' IDs. Unmatched events are returned
 /// as single-platform `CanonicalEvent`s (same as culture_poller behavior).
@@ -38,13 +50,13 @@ pub fn match_candidates(
     kalshi_candidates: Vec<CandidateEvent>,
     poly_candidates: Vec<CandidateEvent>,
     min_score: Option<f64>,
-) -> Vec<CanonicalEvent> {
+) -> MatchResult {
     let min_score = min_score.unwrap_or(DEFAULT_MIN_SCORE);
     let now = Utc::now();
 
     // Bucket by (sport, date) for efficient matching
-    let kalshi_buckets = bucket_by_sport_date(&kalshi_candidates);
-    let poly_buckets = bucket_by_sport_date(&poly_candidates);
+    let kalshi_buckets = bucket_by_sport_date_market(&kalshi_candidates);
+    let poly_buckets = bucket_by_sport_date_market(&poly_candidates);
 
     let mut matched_kalshi: std::collections::HashSet<usize> = std::collections::HashSet::new();
     let mut matched_poly: std::collections::HashSet<usize> = std::collections::HashSet::new();
@@ -92,25 +104,28 @@ pub fn match_candidates(
         .collect();
 
     if !unmatched_kalshi.is_empty() && !unmatched_poly.is_empty() {
-        // Group unmatched by sport only
-        let mut kalshi_by_sport: HashMap<Sport, Vec<usize>> = HashMap::new();
-        let mut poly_by_sport: HashMap<Sport, Vec<usize>> = HashMap::new();
+        // Group unmatched by (sport, market_type) — dates may differ
+        type FallbackKey = (Sport, MarketTypeBucket);
+        let mut kalshi_by_key: HashMap<FallbackKey, Vec<usize>> = HashMap::new();
+        let mut poly_by_key: HashMap<FallbackKey, Vec<usize>> = HashMap::new();
 
         for &ki in &unmatched_kalshi {
-            kalshi_by_sport
-                .entry(kalshi_candidates[ki].sport)
+            let c = &kalshi_candidates[ki];
+            kalshi_by_key
+                .entry((c.sport, c.market_type.bucket_key()))
                 .or_default()
                 .push(ki);
         }
         for &pi in &unmatched_poly {
-            poly_by_sport
-                .entry(poly_candidates[pi].sport)
+            let c = &poly_candidates[pi];
+            poly_by_key
+                .entry((c.sport, c.market_type.bucket_key()))
                 .or_default()
                 .push(pi);
         }
 
-        for (sport, ki_list) in &kalshi_by_sport {
-            if let Some(pi_list) = poly_by_sport.get(sport) {
+        for (key, ki_list) in &kalshi_by_key {
+            if let Some(pi_list) = poly_by_key.get(key) {
                 let matches = match_within_bucket(
                     &kalshi_candidates,
                     ki_list,
@@ -140,15 +155,35 @@ pub fn match_candidates(
         }
     }
 
-    // Emit single-platform events for anything still unmatched
+    // Build unmatched diagnostics + emit single-platform events
+    let mut unmatched_details: Vec<UnmatchedDetail> = Vec::new();
+
     for (i, c) in kalshi_candidates.iter().enumerate() {
         if !matched_kalshi.contains(&i) {
             results.push(build_single_platform_event(c, &now));
+
+            let best = best_rejected_score(c, &poly_candidates, min_score);
+            unmatched_details.push(UnmatchedDetail {
+                event_title: c.raw_title.clone(),
+                platform: "kalshi".to_string(),
+                sport: c.sport.as_str().to_string(),
+                best_rejected_score: best.as_ref().map(|(s, _)| *s),
+                best_rejected_title: best.map(|(_, t)| t),
+            });
         }
     }
     for (i, c) in poly_candidates.iter().enumerate() {
         if !matched_poly.contains(&i) {
             results.push(build_single_platform_event(c, &now));
+
+            let best = best_rejected_score(c, &kalshi_candidates, min_score);
+            unmatched_details.push(UnmatchedDetail {
+                event_title: c.raw_title.clone(),
+                platform: "polymarket".to_string(),
+                sport: c.sport.as_str().to_string(),
+                best_rejected_score: best.as_ref().map(|(s, _)| *s),
+                best_rejected_title: best.map(|(_, t)| t),
+            });
         }
     }
 
@@ -161,18 +196,43 @@ pub fn match_candidates(
         total,
     );
 
-    results
+    MatchResult {
+        events: results,
+        matched_pairs: matched_count,
+        unmatched_details,
+    }
+}
+
+/// Find the highest-scoring cross-platform pair for an unmatched candidate,
+/// even if that score fell below the threshold. Returns `None` if no
+/// opposite-platform candidates exist for the same sport.
+fn best_rejected_score(
+    candidate: &CandidateEvent,
+    opposites: &[CandidateEvent],
+    _min_score: f64,
+) -> Option<(f64, String)> {
+    let mut best: Option<(f64, String)> = None;
+    for opp in opposites {
+        if opp.sport != candidate.sport {
+            continue;
+        }
+        let s = score_pair(candidate, opp);
+        if best.as_ref().map_or(true, |(bs, _)| s > *bs) {
+            best = Some((s, opp.raw_title.clone()));
+        }
+    }
+    best
 }
 
 // ─── Bucketing ──────────────────────────────────────────────────────
 
-type BucketKey = (Sport, Option<NaiveDate>);
+type BucketKey = (Sport, Option<NaiveDate>, MarketTypeBucket);
 
-fn bucket_by_sport_date(candidates: &[CandidateEvent]) -> HashMap<BucketKey, Vec<usize>> {
+fn bucket_by_sport_date_market(candidates: &[CandidateEvent]) -> HashMap<BucketKey, Vec<usize>> {
     let mut buckets: HashMap<BucketKey, Vec<usize>> = HashMap::new();
     for (i, c) in candidates.iter().enumerate() {
         buckets
-            .entry((c.sport, c.game_date))
+            .entry((c.sport, c.game_date, c.market_type.bucket_key()))
             .or_default()
             .push(i);
     }
@@ -190,40 +250,31 @@ fn match_within_bucket(
     poly_indices: &[usize],
     min_score: f64,
 ) -> Vec<(usize, usize, f64)> {
-    // Score every pair
-    let mut scored: Vec<ScoredPair> = Vec::new();
-
-    for &ki in kalshi_indices {
-        for &pi in poly_indices {
-            let score = score_pair(&kalshi_all[ki], &poly_all[pi]);
-            if score >= min_score {
-                scored.push(ScoredPair {
-                    kalshi_idx: ki,
-                    poly_idx: pi,
-                    score,
-                });
-            }
-        }
+    if kalshi_indices.is_empty() || poly_indices.is_empty() {
+        return vec![];
     }
 
-    // Sort descending by score for greedy assignment
-    scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    // Build weight matrix: weights[ki_local][pi_local] = score
+    let weights: Vec<Vec<f64>> = kalshi_indices
+        .iter()
+        .map(|&ki| {
+            poly_indices
+                .iter()
+                .map(|&pi| score_pair(&kalshi_all[ki], &poly_all[pi]))
+                .collect()
+        })
+        .collect();
 
-    // Greedy bipartite: each event matches at most once
-    let mut used_kalshi = std::collections::HashSet::new();
-    let mut used_poly = std::collections::HashSet::new();
-    let mut matches = Vec::new();
+    // Optimal assignment via Hungarian algorithm
+    let assigned = super::hungarian::max_weight_assignment(&weights, min_score);
 
-    for pair in scored {
-        if used_kalshi.contains(&pair.kalshi_idx) || used_poly.contains(&pair.poly_idx) {
-            continue;
-        }
-        used_kalshi.insert(pair.kalshi_idx);
-        used_poly.insert(pair.poly_idx);
-        matches.push((pair.kalshi_idx, pair.poly_idx, pair.score));
-    }
-
-    matches
+    // Map local indices back to global indices
+    assigned
+        .into_iter()
+        .map(|(ki_local, pi_local, score)| {
+            (kalshi_indices[ki_local], poly_indices[pi_local], score)
+        })
+        .collect()
 }
 
 // ─── Scoring ────────────────────────────────────────────────────────
@@ -249,8 +300,8 @@ fn score_pair(kalshi: &CandidateEvent, poly: &CandidateEvent) -> f64 {
         }
     }
 
-    // Moneyline match bonus
-    if kalshi.is_moneyline && poly.is_moneyline {
+    // Market type match bonus (same variant = higher confidence in the match)
+    if kalshi.market_type.bucket_key() == poly.market_type.bucket_key() {
         score += WEIGHT_MONEYLINE_MATCH;
     }
 
@@ -290,25 +341,25 @@ fn compute_team_score(kalshi: &CandidateEvent, poly: &CandidateEvent) -> f64 {
 fn build_matched_event(
     kalshi: &CandidateEvent,
     poly: &CandidateEvent,
-    _score: f64,
+    score: f64,
 ) -> CanonicalEvent {
     let now = Utc::now();
 
-    // Build an event ID in the same format as DomeAPI: "sport-teamA-teamB-YYYY-MM-DD"
     let id = build_event_id(kalshi, poly);
 
-    // Use the Kalshi title (more consistent format), with fallback to Poly
     let title = if !kalshi.raw_title.is_empty() {
         kalshi.raw_title.clone()
     } else {
         poly.raw_title.clone()
     };
 
+    let game_start_time = kalshi.game_start_time.or(poly.game_start_time);
+
     CanonicalEvent {
         id,
         sport: kalshi.sport,
         event_title: title,
-        game_start_time: None,
+        game_start_time,
         status: "open".to_string(),
         platform_ids: PlatformIds {
             kalshi_event_ticker: kalshi.kalshi_event_ticker.clone(),
@@ -317,6 +368,7 @@ fn build_matched_event(
             polymarket_token_ids: poly.polymarket_token_ids.clone(),
             polymarket_outcome_labels: poly.polymarket_outcome_labels.clone(),
         },
+        match_score: Some(score),
         created_at: now,
         updated_at: now,
     }
@@ -341,7 +393,7 @@ fn build_single_platform_event(
         id,
         sport: candidate.sport,
         event_title: candidate.raw_title.clone(),
-        game_start_time: None,
+        game_start_time: candidate.game_start_time,
         status: "open".to_string(),
         platform_ids: PlatformIds {
             kalshi_event_ticker: candidate.kalshi_event_ticker.clone(),
@@ -350,6 +402,7 @@ fn build_single_platform_event(
             polymarket_token_ids: candidate.polymarket_token_ids.clone(),
             polymarket_outcome_labels: candidate.polymarket_outcome_labels.clone(),
         },
+        match_score: None,
         created_at: *now,
         updated_at: *now,
     }
@@ -395,6 +448,7 @@ fn build_event_id(kalshi: &CandidateEvent, poly: &CandidateEvent) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::candidate::MarketType;
     use chrono::NaiveDate;
 
     fn make_kalshi(
@@ -411,9 +465,10 @@ mod tests {
             raw_title: title.to_string(),
             normalized_title: candidate::normalize_title(title),
             game_date: date,
+            game_start_time: None,
             team_a: team_a.map(|s| s.to_string()),
             team_b: team_b.map(|s| s.to_string()),
-            is_moneyline: tickers.len() == 2,
+            market_type: MarketType::Moneyline,
             kalshi_event_ticker: Some("KXTEST".to_string()),
             kalshi_market_tickers: tickers.into_iter().map(|s| s.to_string()).collect(),
             polymarket_slug: None,
@@ -436,9 +491,10 @@ mod tests {
             raw_title: title.to_string(),
             normalized_title: candidate::normalize_title(title),
             game_date: date,
+            game_start_time: None,
             team_a: team_a.map(|s| s.to_string()),
             team_b: team_b.map(|s| s.to_string()),
-            is_moneyline: true,
+            market_type: MarketType::Moneyline,
             kalshi_event_ticker: None,
             kalshi_market_tickers: vec![],
             polymarket_slug: Some(slug.to_string()),
@@ -513,7 +569,7 @@ mod tests {
                 Some("MIA"), Some("DEN"), "heat-nuggets"),
         ];
 
-        let events = match_candidates(kalshi, poly, Some(60.0));
+        let events = match_candidates(kalshi, poly, Some(60.0)).events;
 
         // Should have exactly 2 matched events (not 4)
         let matched: Vec<_> = events.iter().filter(|e| {
@@ -535,7 +591,7 @@ mod tests {
                 Some("MIA"), Some("DEN"), "heat-nuggets"),
         ];
 
-        let events = match_candidates(kalshi, poly, Some(60.0));
+        let events = match_candidates(kalshi, poly, Some(60.0)).events;
 
         let matched: Vec<_> = events.iter().filter(|e| {
             !e.platform_ids.kalshi_market_tickers.is_empty()
@@ -602,7 +658,7 @@ mod tests {
                 Some("DEN"), Some("PHX"), "nuggets-suns"),
         ];
 
-        let events = match_candidates(kalshi, poly, Some(60.0));
+        let events = match_candidates(kalshi, poly, Some(60.0)).events;
         let matched: Vec<_> = events.iter().filter(|e| {
             !e.platform_ids.kalshi_market_tickers.is_empty()
                 && !e.platform_ids.polymarket_token_ids.is_empty()
@@ -636,7 +692,7 @@ mod tests {
                 Some("NYK"), Some("CHI"), "knicks-bulls"),
         ];
 
-        let events = match_candidates(kalshi, poly, Some(60.0));
+        let events = match_candidates(kalshi, poly, Some(60.0)).events;
         let matched: Vec<_> = events.iter().filter(|e| {
             !e.platform_ids.kalshi_market_tickers.is_empty()
                 && !e.platform_ids.polymarket_token_ids.is_empty()
@@ -660,7 +716,7 @@ mod tests {
                 Some("VGK"), Some("EDM"), "knights-oilers"),
         ];
 
-        let events = match_candidates(kalshi, poly, Some(60.0));
+        let events = match_candidates(kalshi, poly, Some(60.0)).events;
         let matched: Vec<_> = events.iter().filter(|e| {
             !e.platform_ids.kalshi_market_tickers.is_empty()
                 && !e.platform_ids.polymarket_token_ids.is_empty()
@@ -684,7 +740,7 @@ mod tests {
                 Some("GONZ"), Some("ALA"), "gonzaga-alabama"),
         ];
 
-        let events = match_candidates(kalshi, poly, Some(60.0));
+        let events = match_candidates(kalshi, poly, Some(60.0)).events;
         let matched: Vec<_> = events.iter().filter(|e| {
             !e.platform_ids.kalshi_market_tickers.is_empty()
                 && !e.platform_ids.polymarket_token_ids.is_empty()
@@ -705,7 +761,7 @@ mod tests {
                 Some("LAL"), Some("BOS"), "lakers-celtics"),
         ];
 
-        let events = match_candidates(kalshi, poly, Some(60.0));
+        let events = match_candidates(kalshi, poly, Some(60.0)).events;
         let matched: Vec<_> = events.iter().filter(|e| {
             !e.platform_ids.kalshi_market_tickers.is_empty()
                 && !e.platform_ids.polymarket_token_ids.is_empty()
@@ -726,7 +782,7 @@ mod tests {
                 Some("BOS"), Some("LAL"), "celtics-lakers"),
         ];
 
-        let events = match_candidates(kalshi, poly, Some(60.0));
+        let events = match_candidates(kalshi, poly, Some(60.0)).events;
         let matched: Vec<_> = events.iter().filter(|e| {
             !e.platform_ids.kalshi_market_tickers.is_empty()
                 && !e.platform_ids.polymarket_token_ids.is_empty()
@@ -750,7 +806,7 @@ mod tests {
                 Some("LAL"), Some("BOS"), "lakers-celtics"),
         ];
 
-        let events = match_candidates(kalshi, poly, Some(60.0));
+        let events = match_candidates(kalshi, poly, Some(60.0)).events;
         let matched: Vec<_> = events.iter().filter(|e| {
             !e.platform_ids.kalshi_market_tickers.is_empty()
                 && !e.platform_ids.polymarket_token_ids.is_empty()
@@ -794,7 +850,7 @@ mod tests {
             make_poly("Mavericks vs Bucks", Sport::Nba, date, Some("DAL"), Some("MIL"), "mavs-bucks"),
         ];
 
-        let events = match_candidates(kalshi, poly, Some(60.0));
+        let events = match_candidates(kalshi, poly, Some(60.0)).events;
         let matched: Vec<_> = events.iter().filter(|e| {
             !e.platform_ids.kalshi_market_tickers.is_empty()
                 && !e.platform_ids.polymarket_token_ids.is_empty()

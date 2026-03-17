@@ -9,7 +9,7 @@ use chrono_tz::US::Eastern;
 use crate::models::event::Sport;
 
 use super::candidate::{
-    self, CandidateEvent, Platform,
+    self, CandidateEvent, MarketType, Platform,
 };
 use super::team_dictionary;
 
@@ -189,38 +189,9 @@ fn process_gamma_events(events: Vec<GammaEvent>, sports: &[Sport]) -> Vec<Candid
 
         // Extract token IDs and outcome labels from the moneyline market
         let (token_ids, mut outcome_labels, is_moneyline) = extract_moneyline_market(&event);
-        if token_ids.is_empty() {
-            continue;
-        }
 
         // Extract teams from title
         let (team_a, team_b) = candidate::extract_teams_from_title(&title, sport);
-
-        // If outcome labels are still generic "Yes"/"No" (single-market fallback),
-        // use title-derived team abbreviations so the WS ingester stores odds
-        // under team names instead of Yes/No.
-        let labels_are_generic = outcome_labels.iter().any(|l| {
-            l.eq_ignore_ascii_case("yes") || l.eq_ignore_ascii_case("no")
-        });
-        if labels_are_generic {
-            if let (Some(ref a), Some(ref b)) = (&team_a, &team_b) {
-                outcome_labels = vec![a.clone(), b.clone()];
-            } else {
-                // Ambiguous Yes/No market with no resolvable teams in title.
-                // Skip to avoid leaking non-game markets into sports.
-                continue;
-            }
-        }
-
-        // Normalize ALL outcome labels to canonical abbreviations so they
-        // match Kalshi labels (e.g. "Bruins" → "BOS", "Devils" → "NJD").
-        outcome_labels = outcome_labels
-            .iter()
-            .map(|label| {
-                team_dictionary::lookup_team(label, Some(sport))
-                    .unwrap_or_else(|| label.clone())
-            })
-            .collect();
 
         // Extract date: prefer end_date from Gamma API, fall back to title
         let game_date = parse_date_from_slug(&slug)
@@ -228,23 +199,85 @@ fn process_gamma_events(events: Vec<GammaEvent>, sports: &[Sport]) -> Vec<Candid
             .or_else(|| parse_gamma_date(event.start_date.as_deref()))
             .or_else(|| candidate::extract_date_from_title(&title));
 
+        let game_start_time = parse_gamma_datetime(event.start_date.as_deref())
+            .or_else(|| parse_gamma_datetime(event.end_date.as_deref()));
+
         let normalized_title = candidate::normalize_title(&title);
 
-        candidates.push(CandidateEvent {
-            platform: Platform::Polymarket,
-            sport,
-            raw_title: title,
-            normalized_title,
-            game_date,
-            team_a,
-            team_b,
-            is_moneyline,
-            kalshi_event_ticker: None,
-            kalshi_market_tickers: vec![],
-            polymarket_slug: Some(slug),
-            polymarket_token_ids: token_ids,
-            polymarket_outcome_labels: outcome_labels,
-        });
+        // Emit moneyline candidate
+        if !token_ids.is_empty() {
+            // If outcome labels are still generic "Yes"/"No" (single-market fallback),
+            // use title-derived team abbreviations so the WS ingester stores odds
+            // under team names instead of Yes/No.
+            let labels_are_generic = outcome_labels.iter().any(|l| {
+                l.eq_ignore_ascii_case("yes") || l.eq_ignore_ascii_case("no")
+            });
+            if labels_are_generic {
+                if let (Some(ref a), Some(ref b)) = (&team_a, &team_b) {
+                    outcome_labels = vec![a.clone(), b.clone()];
+                } else {
+                    // Ambiguous Yes/No market with no resolvable teams in title.
+                    // Don't emit a moneyline candidate for this event, but still
+                    // check for spread/total below.
+                    outcome_labels.clear();
+                }
+            }
+
+            if !outcome_labels.is_empty() {
+                // Normalize ALL outcome labels to canonical abbreviations
+                outcome_labels = outcome_labels
+                    .iter()
+                    .map(|label| {
+                        team_dictionary::lookup_team(label, Some(sport))
+                            .unwrap_or_else(|| label.clone())
+                    })
+                    .collect();
+
+                let market_type = if is_moneyline {
+                    MarketType::Moneyline
+                } else {
+                    MarketType::Moneyline // conservative: treat unknown as moneyline
+                };
+
+                candidates.push(CandidateEvent {
+                    platform: Platform::Polymarket,
+                    sport,
+                    raw_title: title.clone(),
+                    normalized_title: normalized_title.clone(),
+                    game_date,
+                    game_start_time,
+                    team_a: team_a.clone(),
+                    team_b: team_b.clone(),
+                    market_type,
+                    kalshi_event_ticker: None,
+                    kalshi_market_tickers: vec![],
+                    polymarket_slug: Some(slug.clone()),
+                    polymarket_token_ids: token_ids,
+                    polymarket_outcome_labels: outcome_labels,
+                });
+            }
+        }
+
+        // Emit spread/total candidates from grouped markets
+        let extra = extract_spread_total_markets(&event, sport);
+        for (market_type, tids, labels) in extra {
+            candidates.push(CandidateEvent {
+                platform: Platform::Polymarket,
+                sport,
+                raw_title: title.clone(),
+                normalized_title: normalized_title.clone(),
+                game_date,
+                game_start_time,
+                team_a: team_a.clone(),
+                team_b: team_b.clone(),
+                market_type,
+                kalshi_event_ticker: None,
+                kalshi_market_tickers: vec![],
+                polymarket_slug: Some(slug.clone()),
+                polymarket_token_ids: tids,
+                polymarket_outcome_labels: labels,
+            });
+        }
     }
 
     candidates
@@ -377,6 +410,7 @@ fn extract_moneyline_market(event: &GammaEvent) -> (Vec<String>, Vec<String>, bo
             let lower = title.to_lowercase();
             if lower.contains("winner") || lower.contains("moneyline") || lower.contains("spread")
                 || lower.contains("over") || lower.contains("under") || lower.contains("total")
+                || lower.contains("o/u")
             {
                 return false;
             }
@@ -436,7 +470,8 @@ fn extract_moneyline_market(event: &GammaEvent) -> (Vec<String>, Vec<String>, bo
             }
             let lower = title.to_lowercase();
             !(lower.contains("winner") || lower.contains("moneyline") || lower.contains("spread")
-                || lower.contains("over") || lower.contains("under") || lower.contains("total"))
+                || lower.contains("over") || lower.contains("under") || lower.contains("total")
+                || lower.contains("o/u"))
         })
         .count();
     if all_team_market_count > 2 {
@@ -471,6 +506,82 @@ fn extract_moneyline_market(event: &GammaEvent) -> (Vec<String>, Vec<String>, bo
     (token_ids, outcome_labels, is_moneyline)
 }
 
+/// Extract spread and total (over/under) markets from a Polymarket grouped event.
+///
+/// Returns a Vec of `(MarketType, token_ids, outcome_labels)` for each
+/// spread/total market found in the event's grouped sub-markets.
+fn extract_spread_total_markets(
+    event: &GammaEvent,
+    sport: Sport,
+) -> Vec<(MarketType, Vec<String>, Vec<String>)> {
+    let markets = match &event.markets {
+        Some(m) => m,
+        None => return vec![],
+    };
+
+    let mut results = Vec::new();
+
+    for market in markets {
+        if market.closed.unwrap_or(false) || !market.active.unwrap_or(true) {
+            continue;
+        }
+
+        let group_title = market.group_item_title.as_deref().unwrap_or("");
+        let lower_title = group_title.to_lowercase();
+
+        let market_type = if lower_title.contains("spread") {
+            let line = extract_line_from_text(&lower_title);
+            MarketType::Spread(line)
+        } else if lower_title.contains("over") || lower_title.contains("under")
+            || lower_title.contains("total") || lower_title.contains("o/u")
+        {
+            let line = extract_line_from_text(&lower_title);
+            MarketType::Total(line)
+        } else {
+            continue;
+        };
+
+        let token_ids: Vec<String> = market
+            .clob_token_ids
+            .as_ref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default();
+        let mut outcome_labels: Vec<String> = market
+            .outcomes
+            .as_ref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default();
+
+        if token_ids.len() != 2 || outcome_labels.len() != 2 {
+            continue;
+        }
+
+        // Normalize labels
+        outcome_labels = outcome_labels
+            .iter()
+            .map(|label| {
+                team_dictionary::lookup_team(label, Some(sport))
+                    .unwrap_or_else(|| label.clone())
+            })
+            .collect();
+
+        results.push((market_type, token_ids, outcome_labels));
+    }
+
+    results
+}
+
+/// Try to extract a numeric line from free text (e.g., "spread -3.5" → 3.5).
+fn extract_line_from_text(text: &str) -> f64 {
+    for word in text.split_whitespace() {
+        let cleaned = word.trim_matches(|c: char| !c.is_ascii_digit() && c != '.' && c != '-');
+        if let Ok(v) = cleaned.parse::<f64>() {
+            return v;
+        }
+    }
+    0.0
+}
+
 /// Returns true if the event title indicates a championship, award, or other
 /// futures market that inherently has more than 2 real outcomes.
 fn is_futures_event(title: &str) -> bool {
@@ -489,6 +600,17 @@ fn is_futures_event(title: &str) -> bool {
 
 /// Parse an ISO-8601 datetime string from Gamma API into a NaiveDate.
 /// Handles formats like "2026-03-15T00:00:00Z" and "2026-03-15".
+fn parse_gamma_datetime(s: Option<&str>) -> Option<chrono::DateTime<chrono::Utc>> {
+    let s = s?.trim();
+    if s.is_empty() {
+        return None;
+    }
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        return Some(dt.with_timezone(&chrono::Utc));
+    }
+    None
+}
+
 fn parse_gamma_date(s: Option<&str>) -> Option<chrono::NaiveDate> {
     let s = s?.trim();
     if s.is_empty() {
@@ -820,21 +942,29 @@ mod tests {
         let sports = vec![Sport::Nba, Sport::Nhl];
         let candidates = process_gamma_events(vec![event], &sports);
 
-        assert_eq!(candidates.len(), 1, "Should produce exactly one candidate");
-        let c = &candidates[0];
-        assert_eq!(c.sport, Sport::Nba);
-        assert_eq!(c.polymarket_slug.as_deref(), Some("nba-gsw-nyk-2026-03-15"));
-        assert_eq!(c.polymarket_token_ids, vec!["tok_gsw", "tok_nyk"]);
-        assert_eq!(c.polymarket_outcome_labels, vec!["GSW", "NYK"]);
-        assert!(c.is_moneyline);
-        // Outcome labels should NOT be "Yes"/"No"
+        assert_eq!(candidates.len(), 3, "Should produce moneyline + spread + total");
+
+        let ml = candidates.iter().find(|c| c.market_type.is_moneyline())
+            .expect("moneyline candidate");
+        assert_eq!(ml.sport, Sport::Nba);
+        assert_eq!(ml.polymarket_slug.as_deref(), Some("nba-gsw-nyk-2026-03-15"));
+        assert_eq!(ml.polymarket_token_ids, vec!["tok_gsw", "tok_nyk"]);
+        assert_eq!(ml.polymarket_outcome_labels, vec!["GSW", "NYK"]);
         assert!(
-            !c.polymarket_outcome_labels.iter().any(|l|
+            !ml.polymarket_outcome_labels.iter().any(|l|
                 l.eq_ignore_ascii_case("yes") || l.eq_ignore_ascii_case("no")
             ),
             "Labels must not be Yes/No: {:?}",
-            c.polymarket_outcome_labels
+            ml.polymarket_outcome_labels
         );
+
+        let spread = candidates.iter().find(|c| matches!(c.market_type, MarketType::Spread(_)))
+            .expect("spread candidate");
+        assert_eq!(spread.polymarket_token_ids, vec!["tok_s1", "tok_s2"]);
+
+        let total = candidates.iter().find(|c| matches!(c.market_type, MarketType::Total(_)))
+            .expect("total candidate");
+        assert_eq!(total.polymarket_token_ids, vec!["tok_o1", "tok_o2"]);
     }
 
     #[test]

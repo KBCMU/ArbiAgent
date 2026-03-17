@@ -212,6 +212,7 @@ async fn discover_polymarket_culture(client: &Client, state: &AppState) -> usize
                 polymarket_token_ids: token_ids,
                 polymarket_outcome_labels: outcome_labels,
             },
+            match_score: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -413,6 +414,7 @@ async fn discover_kalshi_culture(client: &Client, state: &AppState) -> usize {
                 polymarket_token_ids: vec![],
                 polymarket_outcome_labels: vec![],
             },
+            match_score: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };

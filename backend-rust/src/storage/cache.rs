@@ -1,11 +1,35 @@
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use dashmap::DashMap;
+use serde::Serialize;
 use std::collections::HashMap;
+use std::sync::RwLock;
 
 use crate::models::{
     arb::ArbitrageOpportunity,
     event::{is_event_past, CanonicalEvent, EventOdds, OutcomePrice},
 };
+
+/// Snapshot of the last native-matching cycle, exposed via `/api/v2/matching/stats`.
+#[derive(Debug, Clone, Serialize)]
+pub struct MatchingStats {
+    pub last_run_at: DateTime<Utc>,
+    pub kalshi_candidates: usize,
+    pub polymarket_candidates: usize,
+    pub matched_pairs: usize,
+    pub unmatched_kalshi: usize,
+    pub unmatched_polymarket: usize,
+    pub avg_match_score: f64,
+    pub unmatched: Vec<UnmatchedStat>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UnmatchedStat {
+    pub event_title: String,
+    pub platform: String,
+    pub sport: String,
+    pub best_rejected_score: Option<f64>,
+    pub best_rejected_title: Option<String>,
+}
 
 /// Thread-safe in-memory cache for real-time state.
 ///
@@ -17,6 +41,8 @@ pub struct StateCache {
     pub odds: DashMap<String, EventOdds>,
     /// Active arbitrage opportunities keyed by event ID.
     pub active_arbs: DashMap<String, Vec<ArbitrageOpportunity>>,
+    /// Latest matching cycle statistics (updated every discovery interval).
+    pub matching_stats: RwLock<Option<MatchingStats>>,
 }
 
 impl StateCache {
@@ -25,6 +51,7 @@ impl StateCache {
             events: DashMap::new(),
             odds: DashMap::new(),
             active_arbs: DashMap::new(),
+            matching_stats: RwLock::new(None),
         }
     }
 
@@ -191,6 +218,7 @@ mod tests {
                 polymarket_token_ids: vec![],
                 polymarket_outcome_labels: vec![],
             },
+            match_score: None,
             created_at: updated_at,
             updated_at,
         }

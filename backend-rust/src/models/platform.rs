@@ -160,6 +160,8 @@ pub struct EventResponse {
     pub game_start_time: Option<String>,
     pub created_at: String,
     pub status: String,
+    /// Cross-platform match quality score (0–100). `None` for single-platform events.
+    pub match_score: Option<f64>,
     pub kalshi: Option<PlatformOddsResponse>,
     pub polymarket: Option<PlatformOddsResponse>,
     pub arb_opportunity: Option<ArbOpportunityResponse>,

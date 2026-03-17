@@ -102,9 +102,9 @@ impl AppConfig {
                 .unwrap_or(8080),
 
             event_discovery_interval_secs: std::env::var("EVENT_DISCOVERY_INTERVAL_SECS")
-                .unwrap_or_else(|_| "300".to_string())
+                .unwrap_or_else(|_| "60".to_string())
                 .parse()
-                .unwrap_or(300),
+                .unwrap_or(60),
             price_refresh_interval_secs: std::env::var("PRICE_REFRESH_INTERVAL_SECS")
                 .unwrap_or_else(|_| "10".to_string())
                 .parse()

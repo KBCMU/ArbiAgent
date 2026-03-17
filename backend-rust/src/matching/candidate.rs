@@ -1,7 +1,7 @@
 //! CandidateEvent: platform-agnostic normalized representation of a sports
 //! event, used as input to the cross-platform matching algorithm.
 
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::models::event::Sport;
 
@@ -12,6 +12,48 @@ pub enum Platform {
     Polymarket,
 }
 
+/// The type of market for a sports event.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MarketType {
+    /// Winner / moneyline (e.g., "Who will win LAL vs BOS?")
+    Moneyline,
+    /// Point spread (e.g., "LAL -3.5")
+    Spread(f64),
+    /// Over/Under total points (e.g., "O/U 215.5")
+    Total(f64),
+}
+
+impl MarketType {
+    /// Bucket-level discriminant: two candidates must share the same
+    /// variant *and* the same line (for Spread/Total) to be paired.
+    pub fn bucket_key(&self) -> MarketTypeBucket {
+        match self {
+            MarketType::Moneyline => MarketTypeBucket::Moneyline,
+            MarketType::Spread(line) => MarketTypeBucket::Spread(ordered_f64(*line)),
+            MarketType::Total(line) => MarketTypeBucket::Total(ordered_f64(*line)),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn is_moneyline(&self) -> bool {
+        matches!(self, MarketType::Moneyline)
+    }
+}
+
+/// Hashable bucket key for `MarketType`, where the f64 line is
+/// converted to an ordered integer (millicents) for `Hash`/`Eq`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MarketTypeBucket {
+    Moneyline,
+    Spread(i64),
+    Total(i64),
+}
+
+/// Convert a float line to a hashable integer (multiply by 10 to preserve half-points).
+fn ordered_f64(v: f64) -> i64 {
+    (v * 10.0).round() as i64
+}
+
 /// A normalized sports event from a single platform, ready for matching.
 #[derive(Debug, Clone)]
 pub struct CandidateEvent {
@@ -20,11 +62,13 @@ pub struct CandidateEvent {
     pub raw_title: String,
     pub normalized_title: String,
     pub game_date: Option<NaiveDate>,
+    /// Full start time (UTC) when available from platform APIs.
+    pub game_start_time: Option<DateTime<Utc>>,
     /// Canonical team abbreviation (e.g., "LAL", "BOS").
     pub team_a: Option<String>,
     pub team_b: Option<String>,
-    /// True if this is a moneyline/winner market (vs. spread, O/U, props).
-    pub is_moneyline: bool,
+    /// The type of market this candidate represents.
+    pub market_type: MarketType,
 
     // ── Kalshi-specific fields ──────────────────────────────────────
     pub kalshi_event_ticker: Option<String>,
