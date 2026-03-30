@@ -22,7 +22,12 @@ The matching pipeline is structurally sound but accumulates three user-visible d
   2. A game that appears on both Polymarket and Kalshi is never shown as two separate entries in the event table
   3. An event that was correctly matched (showing odds from both platforms) is not downgraded to single-platform odds on the next fetch cycle
   4. The same event has the same ID across consecutive matching cycles (verified via matching-stats logs)
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Fix build_event_id fallback IDs + post-construction dedup pass (R1)
+- [ ] 01-02-PLAN.md — Stop Polymarket double-emit in process_gamma_events (R2)
+- [ ] 01-03-PLAN.md — Upgrade cache upsert to merge semantics + order-independent token ID comparison (R3)
 
 ### Phase 2: Date Extraction Reliability
 **Goal**: Ensure every candidate event carries an accurate game date from the correct API field so that cross-platform events land in the same date bucket and displayed dates match the actual game date.
@@ -65,7 +70,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundational Stability | 0/TBD | Not started | - |
+| 1. Foundational Stability | 0/3 | Not started | - |
 | 2. Date Extraction Reliability | 0/TBD | Not started | - |
 | 3. Label and Market Type Alignment | 0/TBD | Not started | - |
 | 4. Coverage and Observability | 0/TBD | Not started | - |
