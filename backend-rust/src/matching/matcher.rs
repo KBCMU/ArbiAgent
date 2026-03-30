@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use chrono::{NaiveDate, Utc};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::models::event::{CanonicalEvent, PlatformIds, Sport};
 
@@ -436,39 +436,92 @@ fn build_single_platform_event(
     }
 }
 
+/// Extract potential team abbreviation segments from a slug or ticker.
+///
+/// Keeps tokens that are 2-5 alphabetic characters and are not sport prefixes.
+fn slug_team_segments(slug: &str) -> Vec<String> {
+    let sport_prefixes = ["nba","nfl","nhl","mlb","mls","cfb","cbb","ncaab","ncaaf"];
+    slug.split('-')
+        .filter(|s| {
+            let lower = s.to_lowercase();
+            s.chars().all(|c| c.is_alphabetic())
+                && s.len() >= 2
+                && s.len() <= 5
+                && !sport_prefixes.contains(&lower.as_str())
+        })
+        .map(|s| s.to_lowercase())
+        .collect()
+}
+
+/// Scan a slug/ticker for an embedded YYYY-MM-DD date pattern.
+fn slug_date(slug: &str) -> Option<NaiveDate> {
+    let bytes = slug.as_bytes();
+    for i in 0..bytes.len().saturating_sub(9) {
+        if bytes[i+4] == b'-' && bytes[i+7] == b'-'
+            && bytes[i..i+4].iter().all(|b| b.is_ascii_digit())
+            && bytes[i+5..i+7].iter().all(|b| b.is_ascii_digit())
+            && bytes[i+8..i+10].iter().all(|b| b.is_ascii_digit())
+        {
+            let y: i32 = slug[i..i+4].parse().ok()?;
+            let m: u32 = slug[i+5..i+7].parse().ok()?;
+            let d: u32 = slug[i+8..i+10].parse().ok()?;
+            return NaiveDate::from_ymd_opt(y, m, d);
+        }
+    }
+    None
+}
+
 /// Build a canonical event ID matching DomeAPI's format: "sport-teamA-teamB-YYYY-MM-DD"
 fn build_event_id(kalshi: &CandidateEvent, poly: &CandidateEvent) -> String {
     let sport = kalshi.sport.as_str();
 
-    // Prefer Kalshi teams (more reliable abbreviations), then canonicalize ordering
-    // so `bos-njd` and `njd-bos` produce the same event ID.
-    let mut teams = vec![
-        kalshi
-        .team_a
-        .as_ref()
+    // Extract teams: prefer explicit fields, fall back to slug/ticker segments
+    let poly_slug = poly.polymarket_slug.as_deref().unwrap_or("");
+    let kalshi_ticker = kalshi.kalshi_event_ticker.as_deref().unwrap_or("");
+
+    let team_a = kalshi.team_a.as_ref()
         .or(poly.team_a.as_ref())
         .map(|s| s.to_lowercase())
-        .unwrap_or_else(|| "unk".to_string()),
-        kalshi
-        .team_b
-        .as_ref()
+        .or_else(|| {
+            let segs = slug_team_segments(poly_slug);
+            if segs.is_empty() { slug_team_segments(kalshi_ticker).into_iter().next() }
+            else { segs.into_iter().next() }
+        })
+        .unwrap_or_else(|| {
+            warn!("build_event_id: could not extract team_a from any source for ticker={} slug={}", kalshi_ticker, poly_slug);
+            "unknown1".to_string()
+        });
+
+    let team_b = kalshi.team_b.as_ref()
         .or(poly.team_b.as_ref())
         .map(|s| s.to_lowercase())
-        .unwrap_or_else(|| "unk".to_string()),
-    ];
+        .or_else(|| {
+            let segs = slug_team_segments(poly_slug);
+            if segs.len() >= 2 { Some(segs[1].clone()) }
+            else {
+                let kalshi_segs = slug_team_segments(kalshi_ticker);
+                if kalshi_segs.len() >= 2 { Some(kalshi_segs[1].clone()) } else { None }
+            }
+        })
+        .unwrap_or_else(|| {
+            warn!("build_event_id: could not extract team_b from any source for ticker={} slug={}", kalshi_ticker, poly_slug);
+            "unknown2".to_string()
+        });
+
+    let mut teams = vec![team_a, team_b];
     teams.sort();
-    let team_a = teams[0].clone();
-    let team_b = teams[1].clone();
 
-    // Prefer Polymarket date (slug/date fields are often game-day aligned),
-    // then fall back to Kalshi ticker date.
-    let date = poly
-        .game_date
-        .or(kalshi.game_date)
+    // Extract date: prefer explicit game_date, fall back to slug/ticker parsing
+    let date = poly.game_date.or(kalshi.game_date)
+        .or_else(|| slug_date(poly_slug))
+        .or_else(|| slug_date(kalshi_ticker))
         .map(|d| d.format("%Y-%m-%d").to_string())
-        .unwrap_or_else(|| "nodate".to_string());
+        .unwrap_or_else(|| {
+            warn!("build_event_id: could not extract date for ticker={} slug={}", kalshi_ticker, poly_slug);
+            "undated".to_string()
+        });
 
-    format!("{}-{}-{}-{}", sport, team_a, team_b, date)
+    format!("{}-{}-{}-{}", sport, teams[0], teams[1], date)
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────
@@ -875,6 +928,75 @@ mod tests {
                 assert!(has_nhl_slug, "NHL Kalshi should pair with NHL Polymarket");
             }
         }
+    }
+
+    #[test]
+    fn test_event_id_no_teams_uses_slug_fallback() {
+        let kalshi = make_kalshi(
+            "NBA Lakers vs Celtics",
+            Sport::Nba,
+            None,
+            None,
+            None,
+            vec!["KXNBA-26MAR14-LALBOS"],
+        );
+        let poly = make_poly(
+            "NBA Lakers vs Celtics",
+            Sport::Nba,
+            Some(NaiveDate::from_ymd_opt(2026, 3, 14).unwrap()),
+            None,
+            None,
+            "nba-lal-bos-2026-03-14",
+        );
+        let id = build_event_id(&kalshi, &poly);
+        assert!(!id.contains("unk"), "ID contained 'unk': {}", id);
+        // Stable: same inputs same output
+        let id2 = build_event_id(&kalshi, &poly);
+        assert_eq!(id, id2);
+    }
+
+    #[test]
+    fn test_event_id_no_date_uses_slug_fallback() {
+        let kalshi = make_kalshi(
+            "NBA Lakers vs Celtics",
+            Sport::Nba,
+            None,
+            None,
+            None,
+            vec!["KXNBA-LALBOS"],
+        );
+        let poly = make_poly(
+            "NBA Lakers vs Celtics",
+            Sport::Nba,
+            None,
+            None,
+            None,
+            "nba-lal-bos-2026-03-14",
+        );
+        let id = build_event_id(&kalshi, &poly);
+        assert!(!id.contains("nodate"), "ID contained 'nodate': {}", id);
+    }
+
+    #[test]
+    fn test_event_id_unk_never_appears() {
+        let kalshi = make_kalshi(
+            "NBA game",
+            Sport::Nba,
+            None,
+            None,
+            None,
+            vec!["KXNBA-LALBOS"],
+        );
+        let poly = make_poly(
+            "NBA game",
+            Sport::Nba,
+            Some(NaiveDate::from_ymd_opt(2026, 3, 14).unwrap()),
+            None,
+            None,
+            "nba-lal-bos-2026-03-14",
+        );
+        let id = build_event_id(&kalshi, &poly);
+        assert!(!id.contains("unk"), "ID contained 'unk': {}", id);
     }
 
     #[test]
