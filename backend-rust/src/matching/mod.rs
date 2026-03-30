@@ -309,8 +309,13 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
         // each team's Yes token).
         let token_ids_changed = if is_cached {
             state.cache.events.get(&event.id).map_or(false, |cached| {
-                cached.platform_ids.polymarket_token_ids
-                    != event.platform_ids.polymarket_token_ids
+                // D-05: order-independent token ID comparison (token order can vary
+                // across fetch cycles even when the set of tokens is unchanged).
+                let mut cached_sorted = cached.platform_ids.polymarket_token_ids.clone();
+                cached_sorted.sort();
+                let mut incoming_sorted = event.platform_ids.polymarket_token_ids.clone();
+                incoming_sorted.sort();
+                cached_sorted != incoming_sorted
             })
         } else {
             false
