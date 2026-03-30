@@ -3,7 +3,7 @@
 
 use reqwest::Client;
 use serde::Deserialize;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use chrono_tz::US::Eastern;
 
 use crate::models::event::Sport;
@@ -159,6 +159,8 @@ async fn fetch_gamma_events_by_tag(
 /// requested sports and skipping closed/inactive events.
 fn process_gamma_events(events: Vec<GammaEvent>, sports: &[Sport]) -> Vec<CandidateEvent> {
     let mut candidates = Vec::new();
+    let mut seen: std::collections::HashSet<(String, crate::matching::candidate::MarketTypeBucket)> =
+        std::collections::HashSet::new();
 
     for event in events {
         if event.closed.unwrap_or(false) || !event.active.unwrap_or(true) {
@@ -239,6 +241,35 @@ fn process_gamma_events(events: Vec<GammaEvent>, sports: &[Sport]) -> Vec<Candid
                     MarketType::Moneyline // conservative: treat unknown as moneyline
                 };
 
+                let bucket = market_type.bucket_key();
+                if seen.insert((slug.clone(), bucket)) {
+                    candidates.push(CandidateEvent {
+                        platform: Platform::Polymarket,
+                        sport,
+                        raw_title: title.clone(),
+                        normalized_title: normalized_title.clone(),
+                        game_date,
+                        game_start_time,
+                        team_a: team_a.clone(),
+                        team_b: team_b.clone(),
+                        market_type,
+                        kalshi_event_ticker: None,
+                        kalshi_market_tickers: vec![],
+                        polymarket_slug: Some(slug.clone()),
+                        polymarket_token_ids: token_ids,
+                        polymarket_outcome_labels: outcome_labels,
+                    });
+                } else {
+                    debug!("D-03: skipping duplicate moneyline ({}, {:?})", slug, bucket);
+                }
+            }
+        }
+
+        // Emit spread/total candidates from grouped markets
+        let extra = extract_spread_total_markets(&event, sport);
+        for (market_type, tids, labels) in extra {
+            let bucket = market_type.bucket_key();
+            if seen.insert((slug.clone(), bucket)) {
                 candidates.push(CandidateEvent {
                     platform: Platform::Polymarket,
                     sport,
@@ -252,31 +283,12 @@ fn process_gamma_events(events: Vec<GammaEvent>, sports: &[Sport]) -> Vec<Candid
                     kalshi_event_ticker: None,
                     kalshi_market_tickers: vec![],
                     polymarket_slug: Some(slug.clone()),
-                    polymarket_token_ids: token_ids,
-                    polymarket_outcome_labels: outcome_labels,
+                    polymarket_token_ids: tids,
+                    polymarket_outcome_labels: labels,
                 });
+            } else {
+                debug!("D-03: skipping duplicate spread/total ({}, {:?})", slug, bucket);
             }
-        }
-
-        // Emit spread/total candidates from grouped markets
-        let extra = extract_spread_total_markets(&event, sport);
-        for (market_type, tids, labels) in extra {
-            candidates.push(CandidateEvent {
-                platform: Platform::Polymarket,
-                sport,
-                raw_title: title.clone(),
-                normalized_title: normalized_title.clone(),
-                game_date,
-                game_start_time,
-                team_a: team_a.clone(),
-                team_b: team_b.clone(),
-                market_type,
-                kalshi_event_ticker: None,
-                kalshi_market_tickers: vec![],
-                polymarket_slug: Some(slug.clone()),
-                polymarket_token_ids: tids,
-                polymarket_outcome_labels: labels,
-            });
         }
     }
 
@@ -1109,6 +1121,86 @@ mod tests {
         ]);
         let (ids, _labels, _is_ml) = extract_moneyline_market(&multi_event);
         assert!(ids.is_empty(), "Events with >2 team markets should be rejected");
+    }
+
+    /// Test that a single event cannot produce more than one Moneyline candidate
+    /// even if both the moneyline path and spread/total path could emit one.
+    #[test]
+    fn test_process_gamma_events_no_double_emit() {
+        // An event where extract_moneyline_market returns a genuine moneyline AND
+        // extract_spread_total_markets also returns something labelled like a moneyline.
+        // In the current code, this can't happen through the normal path for moneyline,
+        // but we test with two GammaEvents that share the same slug to trigger the
+        // (slug, Moneyline) duplicate scenario.
+        let event = GammaEvent {
+            slug: Some("nba-lal-bos-2026-03-30".into()),
+            title: Some("Lakers vs. Celtics".into()),
+            closed: Some(false),
+            active: Some(true),
+            volume: None,
+            markets: Some(vec![
+                // Real moneyline market
+                make_market(None, &["Lakers", "Celtics"], &["tok_lal", "tok_bos"]),
+                // Spread market — this is fine, different bucket
+                make_market(Some("Spread -3.5"), &["Celtics", "Lakers"], &["tok_s1", "tok_s2"]),
+            ]),
+            tags: Some(vec![
+                GammaTag { label: Some("NBA".into()), slug: Some("nba".into()) },
+            ]),
+            end_date: None,
+            start_date: None,
+        };
+
+        // Feed the same event twice to force a (slug, Moneyline) duplicate
+        let event_clone = GammaEvent {
+            slug: Some("nba-lal-bos-2026-03-30".into()),
+            title: Some("Lakers vs. Celtics".into()),
+            closed: Some(false),
+            active: Some(true),
+            volume: None,
+            markets: Some(vec![
+                make_market(None, &["Lakers", "Celtics"], &["tok_lal2", "tok_bos2"]),
+            ]),
+            tags: Some(vec![
+                GammaTag { label: Some("NBA".into()), slug: Some("nba".into()) },
+            ]),
+            end_date: None,
+            start_date: None,
+        };
+
+        let results = process_gamma_events(vec![event, event_clone], &[Sport::Nba]);
+        let moneyline_count = results.iter()
+            .filter(|c| c.market_type.is_moneyline())
+            .count();
+        assert!(moneyline_count <= 1, "Expected at most 1 Moneyline but got {}", moneyline_count);
+    }
+
+    /// Test that no two candidates share the same (polymarket_slug, market_type.bucket_key()) pair.
+    #[test]
+    fn test_process_gamma_events_dedup_by_slug_market_type() {
+        // Create two GammaEvents with identical slugs — the guard must deduplicate them.
+        let make_identical = || GammaEvent {
+            slug: Some("nba-gsw-bkn-2026-03-30".into()),
+            title: Some("Warriors vs. Nets".into()),
+            closed: Some(false),
+            active: Some(true),
+            volume: None,
+            markets: Some(vec![
+                make_market(None, &["Warriors", "Nets"], &["tok_gsw", "tok_bkn"]),
+            ]),
+            tags: Some(vec![
+                GammaTag { label: Some("NBA".into()), slug: Some("nba".into()) },
+            ]),
+            end_date: None,
+            start_date: None,
+        };
+
+        let results = process_gamma_events(vec![make_identical(), make_identical()], &[Sport::Nba]);
+        let mut seen = std::collections::HashSet::new();
+        for c in &results {
+            let key = (c.polymarket_slug.clone(), c.market_type.bucket_key());
+            assert!(seen.insert(key), "Duplicate (slug, market_type_bucket) found in output");
+        }
     }
 
     #[test]
