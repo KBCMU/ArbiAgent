@@ -3,6 +3,7 @@ use dashmap::DashMap;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::RwLock;
+use tracing::debug;
 
 use crate::models::{
     arb::ArbitrageOpportunity,
@@ -55,8 +56,55 @@ impl StateCache {
         }
     }
 
-    /// Insert or update a canonical event.
+    /// Returns true when the two token-ID sets differ (order-independent).
+    fn token_ids_differ(a: &[String], b: &[String]) -> bool {
+        if a.len() != b.len() { return true; }
+        let mut sorted_a = a.to_vec();
+        sorted_a.sort();
+        let mut sorted_b = b.to_vec();
+        sorted_b.sort();
+        sorted_a != sorted_b
+    }
+
+    /// Insert or update a canonical event with merge semantics.
+    ///
+    /// D-04: never downgrade a dual-platform event to single-platform.
+    /// D-05: clear stale Polymarket odds when token IDs change between cycles.
     pub fn upsert_event(&self, event: CanonicalEvent) {
+        let incoming_is_dual = event.platform_ids.kalshi_event_ticker.is_some()
+            && event.platform_ids.polymarket_market_slug.is_some();
+
+        if let Some(cached) = self.events.get(&event.id) {
+            let cached_is_dual = cached.platform_ids.kalshi_event_ticker.is_some()
+                && cached.platform_ids.polymarket_market_slug.is_some();
+
+            // D-04: never downgrade dual-platform to single-platform.
+            if cached_is_dual && !incoming_is_dual {
+                debug!(
+                    "upsert_event: refusing downgrade for {} (cached=dual, incoming=single)",
+                    event.id
+                );
+                return;
+            }
+
+            // D-05: if token IDs changed, clear stale Polymarket odds.
+            let should_clear_odds = Self::token_ids_differ(
+                &cached.platform_ids.polymarket_token_ids,
+                &event.platform_ids.polymarket_token_ids,
+            );
+
+            // IMPORTANT: drop the DashMap guard BEFORE any mutable operations to avoid deadlock
+            drop(cached);
+
+            if should_clear_odds {
+                debug!(
+                    "upsert_event: token IDs changed for {} — clearing stale Polymarket odds",
+                    event.id
+                );
+                self.clear_platform_odds(&event.id, "polymarket");
+            }
+        }
+
         self.events.insert(event.id.clone(), event);
     }
 
@@ -246,5 +294,180 @@ mod tests {
         let evicted = cache.evict_stale_events(2);
         assert_eq!(evicted, 0);
         assert!(cache.events.contains_key(id));
+    }
+
+    #[test]
+    fn test_upsert_never_downgrades_dual_to_single() {
+        let cache = StateCache::new();
+        let now = Utc::now();
+        // Insert a dual-platform event
+        let dual = CanonicalEvent {
+            id: "nba-lal-bos-2026-03-14".to_string(),
+            sport: Sport::Nba,
+            event_title: "Lakers vs Celtics".to_string(),
+            game_start_time: None,
+            status: "open".to_string(),
+            platform_ids: PlatformIds {
+                kalshi_event_ticker: Some("KXNBA-X".to_string()),
+                kalshi_market_tickers: vec![],
+                polymarket_market_slug: Some("nba-x".to_string()),
+                polymarket_token_ids: vec!["t1".to_string(), "t2".to_string()],
+                polymarket_outcome_labels: vec![],
+            },
+            match_score: None,
+            created_at: now,
+            updated_at: now,
+        };
+        cache.upsert_event(dual);
+
+        // Now upsert a single-platform event with the same ID
+        let single = CanonicalEvent {
+            id: "nba-lal-bos-2026-03-14".to_string(),
+            sport: Sport::Nba,
+            event_title: "Lakers vs Celtics".to_string(),
+            game_start_time: None,
+            status: "open".to_string(),
+            platform_ids: PlatformIds {
+                kalshi_event_ticker: None,  // single-platform: no Kalshi
+                kalshi_market_tickers: vec![],
+                polymarket_market_slug: Some("nba-x".to_string()),
+                polymarket_token_ids: vec![],
+                polymarket_outcome_labels: vec![],
+            },
+            match_score: None,
+            created_at: now,
+            updated_at: now,
+        };
+        cache.upsert_event(single);
+
+        // Assert cached event still has Kalshi ticker (dual-platform was NOT downgraded)
+        let cached = cache.events.get("nba-lal-bos-2026-03-14").unwrap();
+        assert_eq!(cached.platform_ids.kalshi_event_ticker, Some("KXNBA-X".to_string()));
+    }
+
+    #[test]
+    fn test_upsert_upgrades_single_to_dual() {
+        let cache = StateCache::new();
+        let now = Utc::now();
+        // Insert a single-platform event first
+        let single = CanonicalEvent {
+            id: "nba-lal-bos-2026-03-14".to_string(),
+            sport: Sport::Nba,
+            event_title: "Lakers vs Celtics".to_string(),
+            game_start_time: None,
+            status: "open".to_string(),
+            platform_ids: PlatformIds {
+                kalshi_event_ticker: None,
+                kalshi_market_tickers: vec![],
+                polymarket_market_slug: Some("nba-x".to_string()),
+                polymarket_token_ids: vec![],
+                polymarket_outcome_labels: vec![],
+            },
+            match_score: None,
+            created_at: now,
+            updated_at: now,
+        };
+        cache.upsert_event(single);
+
+        // Now upsert a dual-platform event with the same ID
+        let dual = CanonicalEvent {
+            id: "nba-lal-bos-2026-03-14".to_string(),
+            sport: Sport::Nba,
+            event_title: "Lakers vs Celtics".to_string(),
+            game_start_time: None,
+            status: "open".to_string(),
+            platform_ids: PlatformIds {
+                kalshi_event_ticker: Some("KXNBA-X".to_string()),
+                kalshi_market_tickers: vec![],
+                polymarket_market_slug: Some("nba-x".to_string()),
+                polymarket_token_ids: vec![],
+                polymarket_outcome_labels: vec![],
+            },
+            match_score: None,
+            created_at: now,
+            updated_at: now,
+        };
+        cache.upsert_event(dual);
+
+        // Assert cache now has Kalshi ticker
+        let cached = cache.events.get("nba-lal-bos-2026-03-14").unwrap();
+        assert_eq!(cached.platform_ids.kalshi_event_ticker, Some("KXNBA-X".to_string()));
+    }
+
+    #[test]
+    fn test_upsert_clears_poly_odds_on_token_change() {
+        let cache = StateCache::new();
+        let now = Utc::now();
+        let event_id = "nba-lal-bos-2026-03-14";
+
+        // Insert dual-platform event with token IDs A, B
+        let event_v1 = CanonicalEvent {
+            id: event_id.to_string(),
+            sport: Sport::Nba,
+            event_title: "Lakers vs Celtics".to_string(),
+            game_start_time: None,
+            status: "open".to_string(),
+            platform_ids: PlatformIds {
+                kalshi_event_ticker: Some("KXNBA-X".to_string()),
+                kalshi_market_tickers: vec![],
+                polymarket_market_slug: Some("nba-x".to_string()),
+                polymarket_token_ids: vec!["A".to_string(), "B".to_string()],
+                polymarket_outcome_labels: vec![],
+            },
+            match_score: None,
+            created_at: now,
+            updated_at: now,
+        };
+        cache.upsert_event(event_v1);
+
+        // Add polymarket odds manually
+        use std::collections::HashMap;
+        let mut platform_odds = HashMap::new();
+        let mut poly_odds = HashMap::new();
+        poly_odds.insert("Yes".to_string(), OutcomePrice {
+            yes_price: 0.6,
+            no_price: 0.4,
+            best_bid: None,
+            best_ask: None,
+            bid_size: None,
+            ask_size: None,
+        });
+        platform_odds.insert("polymarket".to_string(), poly_odds);
+        let event_odds = EventOdds {
+            canonical_event_id: event_id.to_string(),
+            platform_odds,
+            updated_at: now,
+        };
+        cache.odds.insert(event_id.to_string(), event_odds);
+
+        // Now upsert same event with DIFFERENT token IDs (C, D)
+        let event_v2 = CanonicalEvent {
+            id: event_id.to_string(),
+            sport: Sport::Nba,
+            event_title: "Lakers vs Celtics".to_string(),
+            game_start_time: None,
+            status: "open".to_string(),
+            platform_ids: PlatformIds {
+                kalshi_event_ticker: Some("KXNBA-X".to_string()),
+                kalshi_market_tickers: vec![],
+                polymarket_market_slug: Some("nba-x".to_string()),
+                polymarket_token_ids: vec!["C".to_string(), "D".to_string()],
+                polymarket_outcome_labels: vec![],
+            },
+            match_score: None,
+            created_at: now,
+            updated_at: now,
+        };
+        cache.upsert_event(event_v2);
+
+        // Assert event token IDs updated
+        let cached = cache.events.get(event_id).unwrap();
+        assert_eq!(cached.platform_ids.polymarket_token_ids, vec!["C".to_string(), "D".to_string()]);
+
+        // Assert polymarket odds were cleared
+        let poly_odds_present = cache.odds.get(event_id)
+            .map_or(false, |odds| odds.platform_odds.contains_key("polymarket"));
+        assert!(!poly_odds_present,
+            "Polymarket odds should have been cleared after token ID change");
     }
 }
