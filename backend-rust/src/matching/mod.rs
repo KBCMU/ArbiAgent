@@ -31,7 +31,125 @@ use tracing::{error, info, warn};
 use crate::models::event::Sport;
 use crate::AppState;
 
+// ─── Tests ──────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::event::{CanonicalEvent, PlatformIds, Sport};
+    use chrono::Utc;
+
+    fn make_event_with_ids(id: &str, kalshi_ticker: Option<&str>, poly_slug: Option<&str>, poly_token_ids: Vec<&str>) -> CanonicalEvent {
+        let now = Utc::now();
+        CanonicalEvent {
+            id: id.to_string(),
+            sport: Sport::Nba,
+            event_title: "Test".to_string(),
+            game_start_time: None,
+            status: "open".to_string(),
+            platform_ids: PlatformIds {
+                kalshi_event_ticker: kalshi_ticker.map(|s| s.to_string()),
+                kalshi_market_tickers: vec![],
+                polymarket_market_slug: poly_slug.map(|s| s.to_string()),
+                polymarket_token_ids: poly_token_ids.iter().map(|s| s.to_string()).collect(),
+                polymarket_outcome_labels: vec![],
+            },
+            match_score: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    #[test]
+    fn test_dedup_pass_collapses_duplicates() {
+        let a = make_event_with_ids("nba-lal-bos-2026-03-14", Some("KXNBA-X"), Some("nba-x"), vec!["tok1"]);
+        let b = make_event_with_ids("nba-lal-bos-2026-03-14", None, Some("nba-x"), vec![]);
+        let result = dedup_events_by_id(vec![a, b]);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].platform_ids.kalshi_event_ticker, Some("KXNBA-X".to_string()));
+        assert_eq!(result[0].platform_ids.polymarket_token_ids, vec!["tok1".to_string()]);
+    }
+
+    #[test]
+    fn test_dedup_pass_keeps_dual_over_single() {
+        // B (single) arrives before A (dual) — dual must still win
+        let a = make_event_with_ids("nba-lal-bos-2026-03-14", Some("KXNBA-X"), Some("nba-x"), vec!["tok1"]);
+        let b = make_event_with_ids("nba-lal-bos-2026-03-14", None, Some("nba-x"), vec![]);
+        let result = dedup_events_by_id(vec![b, a]);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].platform_ids.kalshi_event_ticker, Some("KXNBA-X".to_string()));
+    }
+
+    #[test]
+    fn test_dedup_pass_merges_platform_ids() {
+        // A is kalshi-only, B is polymarket-only — result must have both
+        let a = make_event_with_ids("nba-lal-bos-2026-03-14", Some("KXNBA-X"), None, vec![]);
+        let b = make_event_with_ids("nba-lal-bos-2026-03-14", None, Some("nba-x"), vec!["tok1"]);
+        let result = dedup_events_by_id(vec![a, b]);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].platform_ids.kalshi_event_ticker, Some("KXNBA-X".to_string()));
+        assert_eq!(result[0].platform_ids.polymarket_token_ids, vec!["tok1".to_string()]);
+    }
+
+    #[test]
+    fn test_dedup_pass_no_duplicates_passthrough() {
+        let a = make_event_with_ids("event-a", Some("K1"), Some("slug-a"), vec![]);
+        let b = make_event_with_ids("event-b", Some("K2"), Some("slug-b"), vec![]);
+        let c = make_event_with_ids("event-c", Some("K3"), Some("slug-c"), vec![]);
+        let result = dedup_events_by_id(vec![a, b, c]);
+        assert_eq!(result.len(), 3);
+    }
+}
+
 // ─── Public Entry Point ─────────────────────────────────────────────
+
+/// D-02: Post-construction dedup pass.
+/// Collapses CanonicalEvents that share the same ID.
+/// Non-lossy: keeps the highest-coverage entry as the base, then backfills
+/// any None/empty platform_ids fields from the lower-coverage entry so no
+/// token IDs or market tickers are silently discarded.
+fn dedup_events_by_id(events: Vec<crate::models::event::CanonicalEvent>) -> Vec<crate::models::event::CanonicalEvent> {
+    use std::collections::HashMap;
+    let mut seen: HashMap<String, crate::models::event::CanonicalEvent> = HashMap::new();
+    for event in events {
+        if let Some(entry) = seen.get_mut(&event.id) {
+            let stored_is_dual = entry.platform_ids.kalshi_event_ticker.is_some()
+                && entry.platform_ids.polymarket_market_slug.is_some();
+            let incoming_is_dual = event.platform_ids.kalshi_event_ticker.is_some()
+                && event.platform_ids.polymarket_market_slug.is_some();
+            if incoming_is_dual && !stored_is_dual {
+                // Incoming has more coverage — use it as the base.
+                *entry = event;
+            } else {
+                // Stored entry wins (or equal coverage). Backfill any None/empty
+                // fields from incoming so we don't lose data from either side.
+                if entry.platform_ids.kalshi_event_ticker.is_none() {
+                    entry.platform_ids.kalshi_event_ticker =
+                        event.platform_ids.kalshi_event_ticker.clone();
+                }
+                if entry.platform_ids.kalshi_market_tickers.is_empty() {
+                    entry.platform_ids.kalshi_market_tickers =
+                        event.platform_ids.kalshi_market_tickers.clone();
+                }
+                if entry.platform_ids.polymarket_market_slug.is_none() {
+                    entry.platform_ids.polymarket_market_slug =
+                        event.platform_ids.polymarket_market_slug.clone();
+                }
+                if entry.platform_ids.polymarket_token_ids.is_empty() {
+                    entry.platform_ids.polymarket_token_ids =
+                        event.platform_ids.polymarket_token_ids.clone();
+                }
+                if entry.platform_ids.polymarket_outcome_labels.is_empty() {
+                    entry.platform_ids.polymarket_outcome_labels =
+                        event.platform_ids.polymarket_outcome_labels.clone();
+                }
+            }
+        } else {
+            seen.insert(event.id.clone(), event);
+        }
+    }
+    seen.into_values().collect()
+}
 
 /// Background loop: discovers and matches sports events natively every N seconds.
 ///
@@ -92,6 +210,8 @@ async fn discover_and_match_sports(state: &AppState) -> anyhow::Result<(usize, u
     let matched = match_result.matched_pairs;
     let events = match_result.events;
     let unmatched_details = match_result.unmatched_details;
+    // D-02: collapse any duplicate IDs before proceeding
+    let events = dedup_events_by_id(events);
     let total = events.len();
 
     // Store matching stats for the /api/v2/matching/stats endpoint
