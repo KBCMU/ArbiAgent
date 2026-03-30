@@ -6,7 +6,7 @@ The matching pipeline is structurally sound but accumulates three user-visible d
 
 ## Phases
 
-- [ ] **Phase 1: Foundational Stability** - Eliminate duplicate events by fixing event ID instability, Polymarket double-emit, and cache overwrite
+- [x] **Phase 1: Foundational Stability** - Eliminate duplicate events by fixing event ID instability, Polymarket double-emit, and cache overwrite (completed 2026-03-30)
 - [ ] **Phase 2: Date Extraction Reliability** - Fix Kalshi and Polymarket date sources so events land in correct buckets and show correct dates
 - [ ] **Phase 3: Label and Market Type Alignment** - Fix sport-context in label resolver, spread-line extraction, and prop/game-winner separation
 - [ ] **Phase 4: Coverage and Observability** - Expand college team dictionary, add fuzzy matching, parallelize label resolution, surface rejection diagnostics, recalibrate scoring weights
@@ -27,7 +27,7 @@ The matching pipeline is structurally sound but accumulates three user-visible d
 Plans:
 - [x] 01-01-PLAN.md — Fix build_event_id fallback IDs + post-construction dedup pass (R1)
 - [x] 01-02-PLAN.md — Stop Polymarket double-emit in process_gamma_events (R2)
-- [ ] 01-03-PLAN.md — Upgrade cache upsert to merge semantics + order-independent token ID comparison (R3)
+- [x] 01-03-PLAN.md — Upgrade cache upsert to merge semantics + order-independent token ID comparison (R3)
 
 ### Phase 2: Date Extraction Reliability
 **Goal**: Ensure every candidate event carries an accurate game date from the correct API field so that cross-platform events land in the same date bucket and displayed dates match the actual game date.
@@ -70,7 +70,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundational Stability | 2/3 | In Progress|  |
+| 1. Foundational Stability | 3/3 | Complete   | 2026-03-30 |
 | 2. Date Extraction Reliability | 0/TBD | Not started | - |
 | 3. Label and Market Type Alignment | 0/TBD | Not started | - |
 | 4. Coverage and Observability | 0/TBD | Not started | - |

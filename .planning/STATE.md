@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-foundational-stability/01-01 (build_event_id + dedup_events_by_id)
-last_updated: "2026-03-30T06:44:27.102Z"
+stopped_at: Completed 01-foundational-stability/01-03 (cache merge semantics + order-independent token comparison)
+last_updated: "2026-03-30T06:51:54.010Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-29)
 ## Current Position
 
 Phase: 1 of 4 (Foundational Stability)
-Plan: 2 of 3 in current phase
+Plan: 3 of 3 in current phase
 Status: Ready to execute
 Last activity: 2026-03-30
 
@@ -54,6 +54,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 01-foundational-stability P01-02 | 5min | 1 tasks | 1 files |
 | Phase 01-foundational-stability P01-01 | 25min | 2 tasks | 2 files |
+| Phase 01-foundational-stability P01-03 | 314s | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,7 @@ Recent decisions affecting current work:
 - [Phase 01-foundational-stability]: Used seen: HashSet scoped to process_gamma_events call for within-call dedup; cross-call dedup remains via seen_slugs in fetch_polymarket_sports_candidates
 - [Phase 01-foundational-stability]: build_event_id uses slug_team_segments/slug_date helpers to fall back to slug/ticker parsing when explicit team/date fields are None
 - [Phase 01-foundational-stability]: dedup_events_by_id uses dual-platform coverage as ranking criterion with non-lossy backfill of platform_ids fields
+- [Phase 01-foundational-stability]: Used Self::token_ids_differ as private impl method and sort-then-compare for order-independent token set comparison; dropped DashMap guard to bool before mutable ops to prevent deadlock
 
 ### Pending Todos
 
@@ -79,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30T06:44:27.098Z
-Stopped at: Completed 01-foundational-stability/01-01 (build_event_id + dedup_events_by_id)
+Last session: 2026-03-30T06:51:54.003Z
+Stopped at: Completed 01-foundational-stability/01-03 (cache merge semantics + order-independent token comparison)
 Resume file: None
