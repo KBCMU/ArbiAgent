@@ -67,3 +67,4 @@ SKILL_FRONTEND.md
 execution/
 .tmp/
 .cursor/
+.worktrees/
