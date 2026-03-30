@@ -26,7 +26,7 @@ The matching pipeline is structurally sound but accumulates three user-visible d
 
 Plans:
 - [ ] 01-01-PLAN.md — Fix build_event_id fallback IDs + post-construction dedup pass (R1)
-- [ ] 01-02-PLAN.md — Stop Polymarket double-emit in process_gamma_events (R2)
+- [x] 01-02-PLAN.md — Stop Polymarket double-emit in process_gamma_events (R2)
 - [ ] 01-03-PLAN.md — Upgrade cache upsert to merge semantics + order-independent token ID comparison (R3)
 
 ### Phase 2: Date Extraction Reliability
@@ -70,7 +70,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundational Stability | 0/3 | Not started | - |
+| 1. Foundational Stability | 1/3 | In Progress|  |
 | 2. Date Extraction Reliability | 0/TBD | Not started | - |
 | 3. Label and Market Type Alignment | 0/TBD | Not started | - |
 | 4. Coverage and Observability | 0/TBD | Not started | - |
