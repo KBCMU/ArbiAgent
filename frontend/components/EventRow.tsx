@@ -55,29 +55,28 @@ function extractDate(event: MatchedEvent): string {
     return "";
 }
 
-const SPORT_META: Record<string, { icon: string; label: string; color: string }> = {
-    cbb: { icon: "🏀", label: "CBB", color: "text-orange-600 dark:text-orange-400" },
-    nba: { icon: "🏀", label: "NBA", color: "text-orange-600 dark:text-orange-400" },
-    nfl: { icon: "🏈", label: "NFL", color: "text-green-600 dark:text-green-400" },
-    cfb: { icon: "🏈", label: "CFB", color: "text-green-600 dark:text-green-400" },
-    mlb: { icon: "⚾", label: "MLB", color: "text-red-600 dark:text-red-400" },
-    nhl: { icon: "🏒", label: "NHL", color: "text-sky-600 dark:text-sky-400" },
-    mls: { icon: "⚽", label: "MLS", color: "text-emerald-600 dark:text-emerald-400" },
-    epl: { icon: "⚽", label: "EPL", color: "text-purple-600 dark:text-purple-400" },
-    soccer: { icon: "⚽", label: "Soccer", color: "text-emerald-600 dark:text-emerald-400" },
-    tennis: { icon: "🎾", label: "Tennis", color: "text-lime-600 dark:text-lime-400" },
-    golf: { icon: "⛳", label: "Golf", color: "text-green-600 dark:text-green-400" },
-    mma: { icon: "🥊", label: "MMA", color: "text-red-600 dark:text-red-400" },
-    boxing: { icon: "🥊", label: "Boxing", color: "text-red-600 dark:text-red-400" },
-    politics: { icon: "🏛️", label: "Politics", color: "text-blue-600 dark:text-blue-400" },
-    economics: { icon: "📊", label: "Econ", color: "text-amber-600 dark:text-amber-400" },
-    crypto: { icon: "₿", label: "Crypto", color: "text-yellow-600 dark:text-yellow-400" },
-    science: { icon: "🔬", label: "Science", color: "text-indigo-600 dark:text-indigo-400" },
-    culture: { icon: "🎭", label: "Culture", color: "text-pink-600 dark:text-pink-400" },
-    world: { icon: "🌍", label: "World", color: "text-teal-600 dark:text-teal-400" },
+// Pill styles: soft tinted bg + matching text colour — premium fintech look.
+const SPORT_META: Record<string, { icon: string; label: string; pill: string }> = {
+    cbb: { icon: "🏀", label: "CBB", pill: "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300" },
+    nba: { icon: "🏀", label: "NBA", pill: "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300" },
+    nfl: { icon: "🏈", label: "NFL", pill: "bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-300" },
+    cfb: { icon: "🏈", label: "CFB", pill: "bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-300" },
+    mlb: { icon: "⚾", label: "MLB", pill: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300" },
+    nhl: { icon: "🏒", label: "NHL", pill: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300" },
+    mls: { icon: "⚽", label: "MLS", pill: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" },
+    epl: { icon: "⚽", label: "EPL", pill: "bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300" },
+    soccer: { icon: "⚽", label: "Soccer", pill: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" },
+    tennis: { icon: "🎾", label: "Tennis", pill: "bg-lime-50 text-lime-700 dark:bg-lime-500/10 dark:text-lime-300" },
+    golf: { icon: "⛳", label: "Golf", pill: "bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-300" },
+    mma: { icon: "🥊", label: "MMA", pill: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300" },
+    boxing: { icon: "🥊", label: "Boxing", pill: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300" },
+    politics: { icon: "🏛️", label: "Politics", pill: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300" },
+    economics: { icon: "📊", label: "Econ", pill: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" },
+    crypto: { icon: "₿", label: "Crypto", pill: "bg-yellow-50 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-300" },
+    science: { icon: "🔬", label: "Science", pill: "bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300" },
+    culture: { icon: "🎭", label: "Culture", pill: "bg-pink-50 text-pink-700 dark:bg-pink-500/10 dark:text-pink-300" },
+    world: { icon: "🌍", label: "World", pill: "bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300" },
 };
-
-const COL_BORDER = "border-r border-gray-200/50 dark:border-white/[0.06]";
 
 type Platform = "kalshi" | "polymarket";
 
@@ -90,17 +89,17 @@ function SportLabel({ sport }: { sport: string }) {
     const meta = SPORT_META[sport.toLowerCase()];
     const icon = meta?.icon ?? "📌";
     const label = meta?.label ?? sport.toUpperCase();
-    const color = meta?.color ?? "text-gray-500 dark:text-white/50";
+    const pill = meta?.pill ?? "bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-white/60";
 
     return (
-        <span className={cn("inline-flex items-center gap-1.5", color)}>
-            <span className="text-sm leading-none">{icon}</span>
-            <span
-                className="text-[10px] font-extrabold uppercase tracking-widest"
-                style={{ fontFamily: "var(--font-mono), monospace" }}
-            >
-                {label}
-            </span>
+        <span
+            className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                pill,
+            )}
+        >
+            <span className="text-[11px] leading-none">{icon}</span>
+            <span>{label}</span>
         </span>
     );
 }
@@ -124,7 +123,7 @@ function PriceCell({
 }) {
     if (!available) {
         return (
-            <td className={cn("px-3 py-2.5 text-center", COL_BORDER)}>
+            <td className="px-3 py-3 text-center">
                 <span className="text-xs text-gray-300 dark:text-white/15">—</span>
             </td>
         );
@@ -134,17 +133,17 @@ function PriceCell({
 
     if (!match) {
         return (
-            <td className={cn("px-3 py-2.5 text-center", COL_BORDER)}>
+            <td className="px-3 py-3 text-center">
                 <span className="text-xs text-gray-300 dark:text-white/15">—</span>
             </td>
         );
     }
 
     return (
-        <td className={cn("px-3 py-2.5 text-center", COL_BORDER)}>
+        <td className="px-3 py-3 text-center">
             <span
                 className={cn(
-                    "text-sm font-bold tabular-nums",
+                    "text-sm font-semibold tabular-nums",
                     PLATFORM_COLOR[platform],
                 )}
                 style={{ fontFamily: "var(--font-mono), monospace" }}
@@ -177,7 +176,7 @@ function AvgOddsCell({
 
     if (prices.length === 0) {
         return (
-            <td className={cn("px-3 py-2.5 text-center", COL_BORDER)}>
+            <td className="px-3 py-3 text-center">
                 <span className="text-xs text-gray-300 dark:text-white/15">—</span>
             </td>
         );
@@ -186,9 +185,9 @@ function AvgOddsCell({
     const avg = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
 
     return (
-        <td className={cn("px-3 py-2.5 text-center", COL_BORDER)}>
+        <td className="px-3 py-3 text-center">
             <span
-                className="text-sm font-bold tabular-nums text-gray-900 dark:text-white"
+                className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white"
                 style={{ fontFamily: "var(--font-mono), monospace" }}
             >
                 {formatOdds(avg)}
@@ -218,7 +217,7 @@ function BestOddsCell({
 
     if (kalshiYes <= 0 && polyYes <= 0) {
         return (
-            <td className={cn("px-3 py-2.5 text-center", COL_BORDER)}>
+            <td className="px-3 py-3 text-center">
                 <span className="text-xs text-gray-300 dark:text-white/15">—</span>
             </td>
         );
@@ -228,10 +227,10 @@ function BestOddsCell({
     const bestYesPlatform: Platform = kalshiYes >= polyYes ? "kalshi" : "polymarket";
 
     return (
-        <td className={cn("px-3 py-2.5 text-center", COL_BORDER)}>
+        <td className="px-3 py-3 text-center">
             <span
                 className={cn(
-                    "text-sm font-bold tabular-nums",
+                    "text-sm font-semibold tabular-nums",
                     PLATFORM_COLOR[bestYesPlatform],
                 )}
                 style={{ fontFamily: "var(--font-mono), monospace" }}
@@ -252,26 +251,29 @@ export function EventRow({ event, rowIndex, showSportCol = true, showEventCol = 
 
     return (
         <>
-            {outcomes.map((outcome, idx) => (
+            {outcomes.map((outcome, idx) => {
+                const isLastOutcome = idx === outcomes.length - 1;
+                return (
                 <tr
                     key={outcome}
                     className={cn(
                         "group transition-colors duration-150",
-                        isEven
-                            ? "bg-white dark:bg-transparent"
-                            : "bg-gray-50/60 dark:bg-white/[0.015]",
-                        "hover:bg-blue-50/50 dark:hover:bg-blue-500/[0.04]",
-                        idx === outcomes.length - 1 && "border-b border-gray-200/70 dark:border-white/[0.07]",
+                        isLastOutcome && "border-b border-[var(--border-subtle)]",
                     )}
+                    style={{
+                        backgroundColor: isEven ? "transparent" : "var(--row-zebra)",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--row-hover)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = isEven ? "transparent" : "var(--row-zebra)")}
                 >
                     {idx === 0 && (
                         <td
-                            className={cn("py-2.5 pl-4 pr-2 align-middle", COL_BORDER)}
+                            className="py-3 pl-5 pr-2 align-middle"
                             rowSpan={outcomes.length}
                         >
                             {dateStr ? (
                                 <span
-                                    className="whitespace-nowrap text-[11px] font-semibold tracking-tight text-gray-500 dark:text-white/40"
+                                    className="whitespace-nowrap text-[11px] font-medium tracking-tight text-gray-500 dark:text-white/40"
                                     style={{ fontFamily: "var(--font-mono), monospace" }}
                                 >
                                     {dateStr}
@@ -284,7 +286,7 @@ export function EventRow({ event, rowIndex, showSportCol = true, showEventCol = 
 
                     {showSportCol && idx === 0 && (
                         <td
-                            className={cn("px-2 py-2.5 align-middle", COL_BORDER)}
+                            className="px-2 py-3 align-middle"
                             rowSpan={outcomes.length}
                         >
                             <SportLabel sport={event.sport} />
@@ -293,17 +295,17 @@ export function EventRow({ event, rowIndex, showSportCol = true, showEventCol = 
 
                     {showEventCol && idx === 0 && (
                         <td
-                            className={cn("px-3 py-2.5 align-middle", COL_BORDER)}
+                            className="px-3 py-3 align-middle"
                             rowSpan={outcomes.length}
                         >
-                            <span className="text-[12px] font-semibold leading-tight text-gray-700 dark:text-white/70 line-clamp-2">
+                            <span className="text-[12px] font-medium leading-tight text-gray-700 dark:text-white/70 line-clamp-2">
                                 {event.event_title}
                             </span>
                         </td>
                     )}
 
-                    <td className={cn("px-3 py-2.5", COL_BORDER)}>
-                        <span className="text-[13px] font-bold tracking-tight text-gray-800 dark:text-white/90">
+                    <td className="px-3 py-3">
+                        <span className="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white/90">
                             {outcome}
                         </span>
                     </td>
@@ -338,7 +340,8 @@ export function EventRow({ event, rowIndex, showSportCol = true, showEventCol = 
                         platform="polymarket"
                     />
                 </tr>
-            ))}
+                );
+            })}
         </>
     );
 }

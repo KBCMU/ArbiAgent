@@ -16,6 +16,7 @@ pub enum Sport {
     Cbb,
     Pga,
     Tennis,
+    Ufc,
     // Non-sports categories (discovered via direct Kalshi/Polymarket APIs)
     Politics,
     Crypto,
@@ -37,6 +38,7 @@ impl Sport {
             Sport::Cbb,
             Sport::Pga,
             Sport::Tennis,
+            Sport::Ufc,
         ]
     }
 
@@ -51,6 +53,7 @@ impl Sport {
                 | Sport::Cbb
                 | Sport::Pga
                 | Sport::Tennis
+                | Sport::Ufc
         )
     }
 
@@ -64,6 +67,7 @@ impl Sport {
             Sport::Cbb => "cbb",
             Sport::Pga => "pga",
             Sport::Tennis => "tennis",
+            Sport::Ufc => "ufc",
             Sport::Politics => "politics",
             Sport::Crypto => "crypto",
             Sport::Culture => "culture",
@@ -84,6 +88,7 @@ impl Sport {
             "cbb" => Sport::Cbb,
             "pga" => Sport::Pga,
             "tennis" => Sport::Tennis,
+            "ufc" | "mma" => Sport::Ufc,
             "politics" | "elections" => Sport::Politics,
             "crypto" | "cryptocurrency" => Sport::Crypto,
             "science" | "tech" | "technology" => Sport::Science,

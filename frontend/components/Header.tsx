@@ -2,12 +2,16 @@
 
 import { User, LogOut, TrendingUp, Bitcoin } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { cn } from "@/lib/utils";
 
 export function Header() {
+    const pathname = usePathname();
+    const activeView = pathname?.startsWith("/crypto") ? "crypto" : "predictions";
     const [user, setUser] = useState<SupabaseUser | null>(null);
     const [showDropdown, setShowDropdown] = useState(false);
     const router = useRouter();
@@ -52,18 +56,36 @@ export function Header() {
     return (
         <header className="sticky top-0 z-10 border-b border-gray-200 bg-white dark:border-white/10 dark:bg-[#0a0f1a]">
             <div className="flex h-16 items-center justify-between px-8">
-                <div className="flex items-center gap-2">
-                    <button className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-colors hover:opacity-90" style={{ background: 'var(--purple-brand)' }}>
-                        <TrendingUp className="h-4 w-4" />
-                        Predictions
-                    </button>
-                    <button
-                        onClick={() => router.push("/crypto")}
-                        className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10"
-                    >
-                        <Bitcoin className="h-4 w-4" />
-                        Crypto
-                    </button>
+                <div className="inline-flex items-center rounded-lg border border-gray-200 bg-gray-50/80 p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
+                    {[
+                        { key: "predictions", label: "Predictions", icon: TrendingUp, path: "/markets" },
+                        { key: "crypto", label: "Crypto", icon: Bitcoin, path: "/crypto" },
+                    ].map(({ key, label, icon: Icon, path }) => {
+                        const active = activeView === key;
+                        return (
+                            <button
+                                key={key}
+                                onClick={() => router.push(path)}
+                                className={cn(
+                                    "relative flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-colors duration-200",
+                                    active
+                                        ? "text-white"
+                                        : "text-gray-600 hover:text-gray-900 dark:text-white/60 dark:hover:text-white/90",
+                                )}
+                            >
+                                {active && (
+                                    <motion.span
+                                        layoutId="header-view-pill"
+                                        className="absolute inset-0 rounded-md shadow-sm"
+                                        style={{ background: "var(--purple-brand)" }}
+                                        transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                                    />
+                                )}
+                                <Icon className="relative z-10 h-4 w-4" />
+                                <span className="relative z-10">{label}</span>
+                            </button>
+                        );
+                    })}
                 </div>
 
                 <div className="flex items-center gap-4">

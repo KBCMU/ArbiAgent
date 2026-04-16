@@ -2,7 +2,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Filter, LayoutGrid, List, Search, ChevronDown } from "lucide-react";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import type { MarketType } from "@/lib/api";
+import { MarketTypeFilter } from "./MarketTypeFilter";
 import type { ViewMode } from "./EventTable";
 
 interface FilterBarProps {
@@ -12,6 +15,8 @@ interface FilterBarProps {
     onCategoryChange: (category: string) => void;
     activeSubCategory: string;
     onSubCategoryChange: (subCategory: string) => void;
+    activeMarketType?: MarketType;
+    onMarketTypeChange?: (type: MarketType) => void;
     searchQuery: string;
     onSearchChange: (query: string) => void;
     viewMode: ViewMode;
@@ -36,15 +41,18 @@ const sportLeagues = [
     { value: "tennis", label: "Tennis" },
 ];
 
-const categories = [
-    { value: "all", label: "All" },
-    { value: "sports", label: "Sports" },
-    { value: "politics", label: "Politics" },
-    { value: "crypto", label: "Crypto" },
-    { value: "economics", label: "Economics" },
-    { value: "world", label: "World" },
-    { value: "science", label: "Science" },
-    { value: "culture", label: "Culture" },
+// Soft tinted pill backgrounds per category — matches the premium-fintech palette
+// used by sport tags in EventRow. Kept subtle so the active state (solid brand
+// colour) reads as the primary highlight.
+const categories: { value: string; label: string; idle: string }[] = [
+    { value: "all", label: "All", idle: "bg-gray-50 text-gray-700 hover:bg-gray-100 dark:bg-white/[0.04] dark:text-white/70 dark:hover:bg-white/10" },
+    { value: "sports", label: "Sports", idle: "bg-orange-50/60 text-orange-700 hover:bg-orange-100/70 dark:bg-orange-500/10 dark:text-orange-300 dark:hover:bg-orange-500/15" },
+    { value: "politics", label: "Politics", idle: "bg-blue-50/60 text-blue-700 hover:bg-blue-100/70 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/15" },
+    { value: "crypto", label: "Crypto", idle: "bg-yellow-50/70 text-yellow-800 hover:bg-yellow-100/80 dark:bg-yellow-500/10 dark:text-yellow-300 dark:hover:bg-yellow-500/15" },
+    { value: "economics", label: "Economics", idle: "bg-amber-50/60 text-amber-700 hover:bg-amber-100/70 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/15" },
+    { value: "world", label: "World", idle: "bg-teal-50/60 text-teal-700 hover:bg-teal-100/70 dark:bg-teal-500/10 dark:text-teal-300 dark:hover:bg-teal-500/15" },
+    { value: "science", label: "Science", idle: "bg-indigo-50/60 text-indigo-700 hover:bg-indigo-100/70 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/15" },
+    { value: "culture", label: "Culture", idle: "bg-pink-50/60 text-pink-700 hover:bg-pink-100/70 dark:bg-pink-500/10 dark:text-pink-300 dark:hover:bg-pink-500/15" },
 ];
 
 const SPORTS = new Set(["nfl", "nba", "mlb", "nhl", "cfb", "cbb", "pga", "tennis"]);
@@ -110,15 +118,18 @@ export function FilterBar({
     onCategoryChange,
     activeSubCategory,
     onSubCategoryChange,
+    activeMarketType,
+    onMarketTypeChange,
     searchQuery,
     onSearchChange,
     viewMode,
     onViewModeChange,
 }: FilterBarProps) {
-    const isSports = activeCategory === "sports";
-    const currentFilters = isSports ? sportLeagues : statuses;
-    const currentValue = isSports ? activeSubCategory : activeStatus;
-    const handleFilterChange = isSports ? onSubCategoryChange : onStatusChange;
+    const isShowingSports = activeCategory === "sports" || isSportCategory(activeCategory);
+    const isSportsRoot = activeCategory === "sports";
+    const currentFilters = isSportsRoot ? sportLeagues : statuses;
+    const currentValue = isSportsRoot ? activeSubCategory : activeStatus;
+    const handleFilterChange = isSportsRoot ? onSubCategoryChange : onStatusChange;
     return (
         <div className="border-b border-gray-200 bg-white px-8 py-3 dark:border-white/10 dark:bg-[#0a0f1a]">
             {/* Row 1: Search + Status filters */}
@@ -141,55 +152,78 @@ export function FilterBar({
                         onChange={handleFilterChange}
                         options={currentFilters}
                     />
+                    {isShowingSports && activeMarketType && onMarketTypeChange && (
+                        <div className="ml-2 flex items-center">
+                            <div className="mr-4 h-4 w-px bg-gray-200 dark:bg-white/10" />
+                            <MarketTypeFilter
+                                value={activeMarketType}
+                                onChange={onMarketTypeChange}
+                            />
+                        </div>
+                    )}
                 </div>
 
-                <div className="ml-auto flex items-center rounded-lg border border-gray-200 bg-white p-0.5 dark:border-white/10 dark:bg-white/5">
-                    <button
-                        onClick={() => onViewModeChange("card")}
-                        className={cn(
-                            "rounded-md p-1.5 transition-colors",
-                            viewMode === "card"
-                                ? "text-white shadow-sm"
-                                : "text-gray-500 hover:text-gray-900 dark:text-white/50 dark:hover:text-white"
-                        )}
-                        style={viewMode === "card" ? { background: 'var(--purple-brand)' } : undefined}
-                    >
-                        <LayoutGrid className="h-4 w-4" />
-                    </button>
-                    <button
-                        onClick={() => onViewModeChange("row")}
-                        className={cn(
-                            "rounded-md p-1.5 transition-colors",
-                            viewMode === "row"
-                                ? "text-white shadow-sm"
-                                : "text-gray-500 hover:text-gray-900 dark:text-white/50 dark:hover:text-white"
-                        )}
-                        style={viewMode === "row" ? { background: 'var(--purple-brand)' } : undefined}
-                    >
-                        <List className="h-4 w-4" />
-                    </button>
+                <div className="ml-auto inline-flex items-center rounded-lg border border-gray-200 bg-gray-50/80 p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
+                    {[
+                        { key: "card" as ViewMode, icon: LayoutGrid },
+                        { key: "row" as ViewMode, icon: List },
+                    ].map(({ key, icon: Icon }) => {
+                        const active = viewMode === key;
+                        return (
+                            <button
+                                key={key}
+                                onClick={() => onViewModeChange(key)}
+                                className={cn(
+                                    "relative rounded-md p-1.5 transition-colors duration-150",
+                                    active
+                                        ? "text-white"
+                                        : "text-gray-500 hover:text-gray-900 dark:text-white/50 dark:hover:text-white",
+                                )}
+                                aria-pressed={active}
+                            >
+                                {active && (
+                                    <motion.span
+                                        layoutId="view-mode-pill"
+                                        className="absolute inset-0 rounded-md shadow-sm"
+                                        style={{ background: "var(--purple-brand)" }}
+                                        transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                                    />
+                                )}
+                                <Icon className="relative z-10 h-4 w-4" />
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
-            {/* Row 2: Category filters */}
-            <div className="mt-3 flex gap-1.5 overflow-x-auto">
+            {/* Row 2: Category filters — tinted pills with sliding active state */}
+            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
                 {categories
                     .filter((cat) => cat.value !== "all")
-                    .map((cat) => (
-                        <button
-                            key={cat.value}
-                            onClick={() => onCategoryChange(cat.value)}
-                            className={cn(
-                                "shrink-0 rounded-lg px-3 py-1 text-xs font-medium transition-all",
-                                activeCategory === cat.value
-                                    ? "text-white shadow-sm"
-                                    : "border border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/5",
-                            )}
-                            style={activeCategory === cat.value ? { background: '#3b82f6' } : undefined}
-                        >
-                            {cat.label}
-                        </button>
-                    ))}
+                    .map((cat) => {
+                        const active = activeCategory === cat.value;
+                        return (
+                            <button
+                                key={cat.value}
+                                onClick={() => onCategoryChange(cat.value)}
+                                className={cn(
+                                    "relative shrink-0 rounded-lg px-3 py-1 text-xs font-medium transition-colors duration-150",
+                                    active ? "text-white" : cat.idle,
+                                )}
+                                aria-pressed={active}
+                            >
+                                {active && (
+                                    <motion.span
+                                        layoutId="filter-category-pill"
+                                        className="absolute inset-0 rounded-lg shadow-sm"
+                                        style={{ background: "var(--purple-brand)" }}
+                                        transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                                    />
+                                )}
+                                <span className="relative z-10">{cat.label}</span>
+                            </button>
+                        );
+                    })}
             </div>
         </div>
     );

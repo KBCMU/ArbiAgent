@@ -48,6 +48,15 @@ pub struct AppConfig {
     pub match_min_score: f64,
     /// Run both DomeAPI and native matching in parallel for comparison logging.
     pub enable_shadow_matching: bool,
+
+    // PredictionAPI
+    /// Use PredictionAPI as the sole data source, replacing all native ingestion.
+    /// Default: false. When true, skips native matching, culture poller, and WS ingesters.
+    pub enable_prediction_api: bool,
+    /// Base URL for the PredictionAPI. Default: https://prediction-api-kbcmu.fly.dev
+    pub prediction_api_url: String,
+    /// Bearer token for PredictionAPI authentication.
+    pub prediction_api_token: String,
 }
 
 impl AppConfig {
@@ -158,6 +167,15 @@ impl AppConfig {
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()
                 .unwrap_or(false),
+
+            enable_prediction_api: std::env::var("ENABLE_PREDICTION_API")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
+            prediction_api_url: std::env::var("PREDICTION_API_URL")
+                .unwrap_or_else(|_| "https://prediction-api-kbcmu.fly.dev".to_string()),
+            prediction_api_token: std::env::var("PREDICTION_API_TOKEN")
+                .unwrap_or_default(),
         })
     }
 }

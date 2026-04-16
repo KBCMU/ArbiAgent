@@ -62,46 +62,86 @@ async fn main() -> Result<()> {
 
     // ── Background Tasks ────────────────────────────────────────────
 
-    // Event discovery — native matching (default) or DomeAPI fallback
-    if config.enable_native_matching {
-        let matching_state = Arc::clone(&state);
-        tokio::spawn(async move {
-            matching::run_sports_matching_loop(matching_state).await;
-        });
-        info!("🔍 Event discovery: native matching engine");
+    if config.enable_prediction_api {
+        // PredictionAPI mode — replaces all native ingestion paths.
+        info!("📡 Data source: PredictionAPI ({})", config.prediction_api_url);
 
-        // Shadow mode: also run DomeAPI for comparison logging
-        if config.enable_shadow_matching && !config.dome_api_key.is_empty() {
-            let shadow_state = Arc::clone(&state);
+        let event_state = Arc::clone(&state);
+        tokio::spawn(async move {
+            ingestion::prediction_api::run_prediction_event_loop(event_state).await;
+        });
+
+        let price_state = Arc::clone(&state);
+        tokio::spawn(async move {
+            ingestion::prediction_api::run_prediction_price_loop(price_state).await;
+        });
+    } else {
+        // Native ingestion — matching engine, direct price APIs, culture poller, WebSockets.
+
+        // Event discovery — native matching (default) or DomeAPI fallback
+        if config.enable_native_matching {
+            let matching_state = Arc::clone(&state);
             tokio::spawn(async move {
-                matching::shadow::run_shadow_comparison_loop(shadow_state).await;
+                matching::run_sports_matching_loop(matching_state).await;
             });
-            info!("👥 Shadow matching: DomeAPI running in parallel for comparison");
+            info!("🔍 Event discovery: native matching engine");
+
+            // Shadow mode: also run DomeAPI for comparison logging
+            if config.enable_shadow_matching && !config.dome_api_key.is_empty() {
+                let shadow_state = Arc::clone(&state);
+                tokio::spawn(async move {
+                    matching::shadow::run_shadow_comparison_loop(shadow_state).await;
+                });
+                info!("👥 Shadow matching: DomeAPI running in parallel for comparison");
+            }
+        } else {
+            let poller_state = Arc::clone(&state);
+            tokio::spawn(async move {
+                ingestion::dome_poller::run_event_discovery_loop(poller_state).await;
+            });
+            info!("🔍 Event discovery: DomeAPI (legacy)");
         }
-    } else {
-        let poller_state = Arc::clone(&state);
+
+        // Price refresh — direct batch APIs (default) or DomeAPI fallback
+        if config.enable_direct_price_api {
+            let price_state = Arc::clone(&state);
+            tokio::spawn(async move {
+                ingestion::direct_api::run_direct_price_refresh_loop(price_state).await;
+            });
+            info!("📡 Price fetching: direct Kalshi + Polymarket batch APIs");
+        } else {
+            let price_state = Arc::clone(&state);
+            tokio::spawn(async move {
+                ingestion::dome_poller::run_price_refresh_loop(price_state).await;
+            });
+            info!("📡 Price fetching: DomeAPI (legacy fallback)");
+        }
+
+        // Culture event discovery (Polymarket Gamma API + Kalshi direct API)
+        let culture_state = Arc::clone(&state);
         tokio::spawn(async move {
-            ingestion::dome_poller::run_event_discovery_loop(poller_state).await;
+            ingestion::culture_poller::run_culture_discovery_loop(culture_state).await;
         });
-        info!("🔍 Event discovery: DomeAPI (legacy)");
+
+        // Real-time WebSocket ingesters
+        if config.enable_kalshi_ws {
+            let kalshi_state = Arc::clone(&state);
+            tokio::spawn(async move {
+                ingestion::kalshi_ws::run_kalshi_ws_ingester(kalshi_state).await;
+            });
+            info!("🔌 Kalshi WebSocket ingester enabled");
+        }
+
+        if config.enable_polymarket_ws {
+            let poly_state = Arc::clone(&state);
+            tokio::spawn(async move {
+                ingestion::polymarket_ws::run_polymarket_ws_ingester(poly_state).await;
+            });
+            info!("🔌 Polymarket WebSocket ingester enabled");
+        }
     }
 
-    // Price refresh — direct batch APIs (default) or DomeAPI fallback
-    if config.enable_direct_price_api {
-        let price_state = Arc::clone(&state);
-        tokio::spawn(async move {
-            ingestion::direct_api::run_direct_price_refresh_loop(price_state).await;
-        });
-        info!("📡 Price fetching: direct Kalshi + Polymarket batch APIs");
-    } else {
-        let price_state = Arc::clone(&state);
-        tokio::spawn(async move {
-            ingestion::dome_poller::run_price_refresh_loop(price_state).await;
-        });
-        info!("📡 Price fetching: DomeAPI (legacy fallback)");
-    }
-
-    // Arbitrage detection
+    // Arbitrage detection (always runs regardless of data source)
     let arb_state = Arc::clone(&state);
     tokio::spawn(async move {
         processing::arb_detector::run_arb_detection_loop(arb_state).await;
@@ -113,34 +153,11 @@ async fn main() -> Result<()> {
         storage::supabase::run_snapshot_writer(snapshot_state).await;
     });
 
-    // Culture event discovery (Polymarket Gamma API + Kalshi direct API)
-    let culture_state = Arc::clone(&state);
-    tokio::spawn(async move {
-        ingestion::culture_poller::run_culture_discovery_loop(culture_state).await;
-    });
-
     // Cache eviction — periodically removes stale/settled events to bound memory
     let eviction_state = Arc::clone(&state);
     tokio::spawn(async move {
         run_cache_eviction_loop(eviction_state).await;
     });
-
-    // Real-time WebSocket ingesters
-    if config.enable_kalshi_ws {
-        let kalshi_state = Arc::clone(&state);
-        tokio::spawn(async move {
-            ingestion::kalshi_ws::run_kalshi_ws_ingester(kalshi_state).await;
-        });
-        info!("🔌 Kalshi WebSocket ingester enabled");
-    }
-
-    if config.enable_polymarket_ws {
-        let poly_state = Arc::clone(&state);
-        tokio::spawn(async move {
-            ingestion::polymarket_ws::run_polymarket_ws_ingester(poly_state).await;
-        });
-        info!("🔌 Polymarket WebSocket ingester enabled");
-    }
 
     // ── HTTP Server with Graceful Shutdown ───────────────────────────
 

@@ -6,7 +6,6 @@ import { Header } from "@/components/Header";
 import { FilterBar, isSportCategory } from "@/components/FilterBar";
 import { EventTable, type ViewMode } from "@/components/EventTable";
 import { ConnectionError } from "@/components/ConnectionError";
-import { MarketTypeFilter } from "@/components/MarketTypeFilter";
 import { fetchMatchedEvents, MatchedEvent, type MarketType } from "@/lib/api";
 
 const POLL_INTERVAL_MS = 15_000;
@@ -116,20 +115,13 @@ export default function MarketsPage() {
                         setActiveSubCategory(val);
                         setActiveMarketType("moneyline");
                     }}
+                    activeMarketType={activeMarketType}
+                    onMarketTypeChange={setActiveMarketType}
                     searchQuery={searchQuery}
                     onSearchChange={setSearchQuery}
                     viewMode={viewMode}
                     onViewModeChange={handleViewModeChange}
                 />
-
-                {isSportsView && (
-                    <div className="border-b border-white/10 bg-[#0a0f1a] px-8 py-2.5">
-                        <MarketTypeFilter
-                            value={activeMarketType}
-                            onChange={setActiveMarketType}
-                        />
-                    </div>
-                )}
 
                 <div className={viewMode === "row" ? "" : "p-6"}>
                     {error ? (
