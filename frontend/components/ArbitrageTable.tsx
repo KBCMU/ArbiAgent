@@ -89,7 +89,7 @@ function PlatformBadge({
 
 function SkeletonRow() {
     return (
-        <div className="grid grid-cols-11 items-center gap-4 border-b border-[var(--border-subtle)] px-6 py-4 dark:border-white/10">
+        <div className="grid grid-cols-12 items-center gap-4 border-b border-[var(--border-subtle)] px-6 py-4 dark:border-white/10">
             <div className="col-span-1">
                 <div className="skeleton-shimmer mx-auto h-5 w-12 rounded" />
             </div>
@@ -97,7 +97,7 @@ function SkeletonRow() {
                 <div className="skeleton-shimmer h-4 w-3/4 rounded" />
                 <div className="skeleton-shimmer mt-1.5 h-3 w-1/3 rounded" />
             </div>
-            <div className="col-span-1">
+            <div className="col-span-2">
                 <div className="skeleton-shimmer h-3 w-10 rounded" />
             </div>
             <div className="col-span-3">
@@ -114,7 +114,7 @@ export function ArbitrageTable({ arbs, isLoading }: ArbitrageTableProps) {
     return (
         <div className="overflow-hidden rounded-xl border border-[var(--border-default)] bg-white shadow-card dark:border-white/10 dark:bg-[#111827]">
             {/* Header */}
-            <div className="grid grid-cols-11 items-center gap-4 border-b border-[var(--border-default)] bg-gray-50/70 px-6 py-3 dark:border-white/10 dark:bg-white/[0.025]">
+            <div className="grid grid-cols-12 items-center gap-4 border-b border-[var(--border-default)] bg-gray-50/70 px-6 py-3 dark:border-white/10 dark:bg-white/[0.025]">
                 <div className="col-span-1 text-center">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-white/50">
                         Margin
@@ -125,7 +125,7 @@ export function ArbitrageTable({ arbs, isLoading }: ArbitrageTableProps) {
                         Event
                     </span>
                 </div>
-                <div className="col-span-1">
+                <div className="col-span-2">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-white/50">
                         Outcome
                     </span>
@@ -165,7 +165,7 @@ export function ArbitrageTable({ arbs, isLoading }: ArbitrageTableProps) {
                         return (
                             <div
                                 key={`${arb.canonical_event_id}-${arb.outcome}-${arb.buy_platform}-${idx}`}
-                                className="group grid grid-cols-11 items-center gap-4 border-b border-[var(--border-subtle)] px-6 py-3 transition-colors duration-150 hover:bg-[var(--row-hover)] dark:border-white/10 dark:hover:bg-white/[0.04]"
+                                className="group grid grid-cols-12 items-center gap-4 border-b border-[var(--border-subtle)] px-6 py-3 transition-colors duration-150 hover:bg-[var(--row-hover)] dark:border-white/10 dark:hover:bg-white/[0.04]"
                                 style={{
                                     borderLeft: "3px solid var(--emerald-brand)",
                                     backgroundColor: isEven
@@ -203,7 +203,7 @@ export function ArbitrageTable({ arbs, isLoading }: ArbitrageTableProps) {
                                 </div>
 
                                 {/* Outcome */}
-                                <div className="col-span-1">
+                                <div className="col-span-2">
                                     <span className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-white/80">
                                         {arb.outcome}
                                     </span>
