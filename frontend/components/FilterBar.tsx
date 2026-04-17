@@ -37,25 +37,30 @@ const sportLeagues = [
     { value: "nhl", label: "NHL" },
     { value: "cfb", label: "CFB" },
     { value: "cbb", label: "CBB" },
-    { value: "pga", label: "PGA" },
     { value: "tennis", label: "Tennis" },
 ];
 
 // Soft tinted pill backgrounds per category — matches the premium-fintech palette
 // used by sport tags in EventRow. Kept subtle so the active state (solid brand
-// colour) reads as the primary highlight.
-const categories: { value: string; label: string; idle: string }[] = [
+// colour) reads as the primary highlight. `disabled` categories are greyed out
+// and non-interactive until we ship data for them.
+const categories: {
+    value: string;
+    label: string;
+    idle: string;
+    disabled?: boolean;
+}[] = [
     { value: "all", label: "All", idle: "bg-gray-50 text-gray-700 hover:bg-gray-100 dark:bg-white/[0.04] dark:text-white/70 dark:hover:bg-white/10" },
     { value: "sports", label: "Sports", idle: "bg-orange-50/60 text-orange-700 hover:bg-orange-100/70 dark:bg-orange-500/10 dark:text-orange-300 dark:hover:bg-orange-500/15" },
-    { value: "politics", label: "Politics", idle: "bg-blue-50/60 text-blue-700 hover:bg-blue-100/70 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/15" },
-    { value: "crypto", label: "Crypto", idle: "bg-yellow-50/70 text-yellow-800 hover:bg-yellow-100/80 dark:bg-yellow-500/10 dark:text-yellow-300 dark:hover:bg-yellow-500/15" },
-    { value: "economics", label: "Economics", idle: "bg-amber-50/60 text-amber-700 hover:bg-amber-100/70 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/15" },
-    { value: "world", label: "World", idle: "bg-teal-50/60 text-teal-700 hover:bg-teal-100/70 dark:bg-teal-500/10 dark:text-teal-300 dark:hover:bg-teal-500/15" },
-    { value: "science", label: "Science", idle: "bg-indigo-50/60 text-indigo-700 hover:bg-indigo-100/70 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/15" },
-    { value: "culture", label: "Culture", idle: "bg-pink-50/60 text-pink-700 hover:bg-pink-100/70 dark:bg-pink-500/10 dark:text-pink-300 dark:hover:bg-pink-500/15" },
+    { value: "politics", label: "Politics", idle: "bg-blue-50/60 text-blue-700 hover:bg-blue-100/70 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/15", disabled: true },
+    { value: "crypto", label: "Crypto", idle: "bg-yellow-50/70 text-yellow-800 hover:bg-yellow-100/80 dark:bg-yellow-500/10 dark:text-yellow-300 dark:hover:bg-yellow-500/15", disabled: true },
+    { value: "economics", label: "Economics", idle: "bg-amber-50/60 text-amber-700 hover:bg-amber-100/70 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/15", disabled: true },
+    { value: "world", label: "World", idle: "bg-teal-50/60 text-teal-700 hover:bg-teal-100/70 dark:bg-teal-500/10 dark:text-teal-300 dark:hover:bg-teal-500/15", disabled: true },
+    { value: "science", label: "Science", idle: "bg-indigo-50/60 text-indigo-700 hover:bg-indigo-100/70 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/15", disabled: true },
+    { value: "culture", label: "Culture", idle: "bg-pink-50/60 text-pink-700 hover:bg-pink-100/70 dark:bg-pink-500/10 dark:text-pink-300 dark:hover:bg-pink-500/15", disabled: true },
 ];
 
-const SPORTS = new Set(["nfl", "nba", "mlb", "nhl", "cfb", "cbb", "pga", "tennis"]);
+const SPORTS = new Set(["nfl", "nba", "mlb", "nhl", "cfb", "cbb", "tennis"]);
 
 export function isSportCategory(cat: string): boolean {
     return SPORTS.has(cat);
@@ -202,17 +207,28 @@ export function FilterBar({
                     .filter((cat) => cat.value !== "all")
                     .map((cat) => {
                         const active = activeCategory === cat.value;
+                        const disabled = cat.disabled === true;
                         return (
                             <button
                                 key={cat.value}
-                                onClick={() => onCategoryChange(cat.value)}
+                                onClick={() => {
+                                    if (disabled) return;
+                                    onCategoryChange(cat.value);
+                                }}
+                                disabled={disabled}
+                                title={disabled ? "Coming soon" : undefined}
                                 className={cn(
                                     "relative shrink-0 rounded-lg px-3 py-1 text-xs font-medium transition-colors duration-150",
-                                    active ? "text-white" : cat.idle,
+                                    disabled
+                                        ? "cursor-not-allowed bg-gray-100/70 text-gray-400 dark:bg-white/[0.03] dark:text-white/30"
+                                        : active
+                                            ? "text-white"
+                                            : cat.idle,
                                 )}
                                 aria-pressed={active}
+                                aria-disabled={disabled}
                             >
-                                {active && (
+                                {active && !disabled && (
                                     <motion.span
                                         layoutId="filter-category-pill"
                                         className="absolute inset-0 rounded-lg shadow-sm"

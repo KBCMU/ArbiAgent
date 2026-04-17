@@ -9,10 +9,10 @@ interface MarketTypeFilterProps {
     onChange: (type: MarketType) => void;
 }
 
-const OPTIONS: { value: MarketType; label: string }[] = [
+const OPTIONS: { value: MarketType; label: string; disabled?: boolean }[] = [
     { value: "moneyline", label: "Moneyline" },
-    { value: "spread", label: "Spread" },
-    { value: "total", label: "Total (O/U)" },
+    { value: "spread", label: "Spread", disabled: true },
+    { value: "total", label: "Total (O/U)", disabled: true },
 ];
 
 export function MarketTypeFilter({ value, onChange }: MarketTypeFilterProps) {
@@ -20,18 +20,27 @@ export function MarketTypeFilter({ value, onChange }: MarketTypeFilterProps) {
         <div className="inline-flex items-center rounded-lg border border-gray-200 bg-gray-50/80 p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
             {OPTIONS.map((opt) => {
                 const active = opt.value === value;
+                const disabled = opt.disabled === true;
                 return (
                     <button
                         key={opt.value}
-                        onClick={() => onChange(opt.value)}
+                        onClick={() => {
+                            if (disabled) return;
+                            onChange(opt.value);
+                        }}
+                        disabled={disabled}
+                        title={disabled ? "Coming soon" : undefined}
+                        aria-disabled={disabled}
                         className={cn(
                             "relative rounded-md px-3.5 py-1 text-xs font-semibold tracking-wide transition-colors duration-200",
-                            active
-                                ? "text-white"
-                                : "text-gray-500 hover:text-gray-900 dark:text-white/45 dark:hover:text-white/70",
+                            disabled
+                                ? "cursor-not-allowed text-gray-300 dark:text-white/20"
+                                : active
+                                    ? "text-white"
+                                    : "text-gray-500 hover:text-gray-900 dark:text-white/45 dark:hover:text-white/70",
                         )}
                     >
-                        {active && (
+                        {active && !disabled && (
                             <motion.span
                                 layoutId="market-type-pill"
                                 className="absolute inset-0 rounded-md shadow-sm"

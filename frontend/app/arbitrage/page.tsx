@@ -10,20 +10,22 @@ import { BarChart3, Zap, ChevronDown, Filter } from "lucide-react";
 
 const POLL_INTERVAL_MS = 5_000;
 
-const SPORTS_LEAGUES = ["nfl", "nba", "mlb", "nhl", "cfb", "cbb", "pga", "tennis"];
+const SPORTS_LEAGUES = ["nfl", "nba", "mlb", "nhl", "cfb", "cbb", "tennis"];
 
-const DISCIPLINES = [
+type FilterOption = { value: string; label: string; disabled?: boolean };
+
+const DISCIPLINES: FilterOption[] = [
     { value: "all", label: "All Events" },
     { value: "sports", label: "Sports" },
-    { value: "politics", label: "Politics" },
-    { value: "crypto", label: "Crypto" },
-    { value: "economics", label: "Economics" },
-    { value: "world", label: "World" },
-    { value: "science", label: "Science" },
-    { value: "culture", label: "Culture" },
+    { value: "politics", label: "Politics", disabled: true },
+    { value: "crypto", label: "Crypto", disabled: true },
+    { value: "economics", label: "Economics", disabled: true },
+    { value: "world", label: "World", disabled: true },
+    { value: "science", label: "Science", disabled: true },
+    { value: "culture", label: "Culture", disabled: true },
 ];
 
-const LEAGUE_OPTIONS: Record<string, { value: string; label: string }[]> = {
+const LEAGUE_OPTIONS: Record<string, FilterOption[]> = {
     sports: [
         { value: "all", label: "All Leagues" },
         { value: "nfl", label: "NFL" },
@@ -32,7 +34,6 @@ const LEAGUE_OPTIONS: Record<string, { value: string; label: string }[]> = {
         { value: "nhl", label: "NHL" },
         { value: "cfb", label: "CFB" },
         { value: "cbb", label: "CBB" },
-        { value: "pga", label: "PGA" },
         { value: "tennis", label: "Tennis" },
     ],
 };
@@ -97,7 +98,7 @@ function FilterSelect({
 }: {
     value: string;
     onChange: (v: string) => void;
-    options: { value: string; label: string }[];
+    options: FilterOption[];
 }) {
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
@@ -122,18 +123,35 @@ function FilterSelect({
             </button>
             {open && (
                 <div className="absolute left-0 top-full z-50 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-white/10 dark:bg-[#1a1f2e]">
-                    {options.map((opt) => (
-                        <button
-                            key={opt.value}
-                            onClick={() => { onChange(opt.value); setOpen(false); }}
-                            className={`block w-full px-3 py-2 text-left text-sm transition-colors ${opt.value === value
-                                ? "bg-emerald-50 font-semibold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
-                                : "text-gray-700 hover:bg-gray-50 dark:text-white/70 dark:hover:bg-white/5"
-                                }`}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
+                    {options.map((opt) => {
+                        const disabled = opt.disabled === true;
+                        return (
+                            <button
+                                key={opt.value}
+                                onClick={() => {
+                                    if (disabled) return;
+                                    onChange(opt.value);
+                                    setOpen(false);
+                                }}
+                                disabled={disabled}
+                                title={disabled ? "Coming soon" : undefined}
+                                aria-disabled={disabled}
+                                className={`block w-full px-3 py-2 text-left text-sm transition-colors ${disabled
+                                    ? "cursor-not-allowed text-gray-300 dark:text-white/20"
+                                    : opt.value === value
+                                        ? "bg-emerald-50 font-semibold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
+                                        : "text-gray-700 hover:bg-gray-50 dark:text-white/70 dark:hover:bg-white/5"
+                                    }`}
+                            >
+                                {opt.label}
+                                {disabled && (
+                                    <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-300 dark:text-white/25">
+                                        Soon
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
             )}
         </div>
