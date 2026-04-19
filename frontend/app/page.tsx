@@ -76,7 +76,6 @@ export default function LandingPage() {
           </a>
           <div className="nav-links">
             <a href="#products">Products</a>
-            <a href="#who-its-for">Traders</a>
             <a href="#pricing">Pricing</a>
           </div>
           <div className="nav-actions">
@@ -88,14 +87,6 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="hero-section">
-        <div className="hero-eyebrow-row">
-          <span className="sparkle-dot">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z" fill="#2563eb" />
-            </svg>
-          </span>
-          <span>Trusted across prediction markets</span>
-        </div>
         <h1 className="hero-title">
           Trading infrastructure for <em>prediction&nbsp;markets.</em>
         </h1>
@@ -113,7 +104,7 @@ export default function LandingPage() {
             <div className="dash-dots">
               <span></span><span></span><span></span>
             </div>
-            <div className="dash-url">arbiagent.com/arbitrage</div>
+            <div className="dash-url">arbi-agent.vercel.app/arbitrage</div>
             <div style={{ width: "46px" }}></div>
           </div>
           <div className="dash-body">
@@ -272,49 +263,6 @@ export default function LandingPage() {
               <h3>Know your edge in real time.</h3>
               <p>Track every position, measure P&amp;L by strategy, and analyze which markets work best for you.</p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Who it's for */}
-      <section className="personas" id="who-its-for">
-        <div className="personas-inner">
-          <div className="section-head">
-            <div className="section-eyebrow ai">Who it&apos;s for</div>
-            <h2 className="section-title ai d1">Built for every kind of <em>trader.</em></h2>
-            <p className="section-sub ai d2">Whether you&apos;re just spotting odds or running autonomous strategies, Arbiagent meets you where you are.</p>
-          </div>
-          <div className="persona-grid">
-            {[
-              {
-                icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-5-5" /></svg>,
-                title: "The researcher",
-                desc: "Explore live odds across Kalshi and Polymarket. Compare markets, watch spreads, and build conviction before you act.",
-                cta: "Start with Markets",
-                delay: "",
-              },
-              {
-                icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17l6-6 4 4 8-8" /><path d="M21 7v5h-5" /></svg>,
-                title: "The arb trader",
-                desc: "Capture cross-platform price gaps the moment they appear. Use our scanner, our alerts, and our execution playbook.",
-                cta: "Explore Arbitrage",
-                delay: "d1",
-              },
-              {
-                icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3 7h7l-5.5 4.5 2 7L12 16l-6.5 4.5 2-7L2 9h7z" /></svg>,
-                title: "The autonomous trader",
-                desc: "Deploy agents per market vertical. Your strategies, your risk parameters, running 24/7 without you touching a keyboard.",
-                cta: "Meet Agents",
-                delay: "d2",
-              },
-            ].map((p) => (
-              <a key={p.title} href="#" className={`persona ai ${p.delay}`}>
-                <div className="persona-icon">{p.icon}</div>
-                <h4>{p.title}</h4>
-                <p>{p.desc}</p>
-                <span className="persona-cta">{p.cta}</span>
-              </a>
-            ))}
           </div>
         </div>
       </section>
@@ -483,7 +431,7 @@ export default function LandingPage() {
         nav { position: sticky; top: 0; z-index: 100; padding: 0 2rem; height: 74px; display: flex; align-items: center; justify-content: space-between; background: transparent; font-family: var(--font); }
         nav.scrolled { background: rgba(255,255,255,0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
         .nav-inner { max-width: 1280px; width: 100%; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
-        .nav-logo img { height: 46px; display: block; }
+        .nav-logo img { height: 80px; display: block; }
         .nav-links { display: flex; gap: 1.875rem; }
         .nav-links a { font-size: 0.9375rem; font-weight: 500; color: var(--text); text-decoration: none; transition: color 0.15s; padding: 0.5rem 0; }
         .nav-links a:hover { color: var(--blue); }
@@ -519,7 +467,7 @@ export default function LandingPage() {
         .dash-url { flex: 1; font-family: var(--mono); font-size: 0.78rem; color: var(--dim); background: #fff; border: 1px solid var(--border); padding: 0.3rem 0.75rem; border-radius: 6px; max-width: 380px; margin: 0 auto; }
         .dash-body { display: grid; grid-template-columns: 200px 1fr; min-height: 440px; }
         .dash-sidebar { background: #f9fafc; border-right: 1px solid var(--border); padding: 1rem 0.75rem; }
-        .dash-side-logo img { height: 32px; margin: 0.25rem 0.5rem 1.25rem; }
+        .dash-side-logo img { height: 52px; margin: 0.25rem 0.5rem 1.25rem; }
         .dash-nav-item { display: flex; align-items: center; gap: 0.625rem; padding: 0.5rem 0.75rem; border-radius: 7px; font-size: 0.8125rem; font-weight: 500; color: var(--muted); margin-bottom: 0.125rem; cursor: pointer; }
         .dash-nav-item.active { background: #eff6ff; color: var(--blue); font-weight: 600; }
         .dash-nav-item svg { width: 14px; height: 14px; flex-shrink: 0; }
@@ -679,7 +627,7 @@ export default function LandingPage() {
         /* ── Footer ── */
         footer { background: #f6f9fc; color: var(--text-soft); padding: 4rem 2rem 2rem; border-top: 1px solid var(--border); font-family: var(--font); }
         .footer-top { max-width: 1280px; margin: 0 auto; display: grid; grid-template-columns: 1.4fr repeat(4,1fr); gap: 3rem; padding-bottom: 3rem; }
-        .footer-brand img { height: 40px; margin-bottom: 1rem; display: block; }
+        .footer-brand img { height: 64px; margin-bottom: 1rem; display: block; }
         .footer-tagline { font-size: 0.875rem; color: var(--muted); line-height: 1.55; max-width: 280px; margin-bottom: 1.5rem; }
         .footer-socials { display: flex; gap: 0.75rem; }
         .footer-socials a { width: 34px; height: 34px; background: #fff; border: 1px solid var(--border); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--muted); text-decoration: none; transition: all 0.15s; }

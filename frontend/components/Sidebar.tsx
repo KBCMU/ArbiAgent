@@ -6,7 +6,8 @@ import {
     TrendingUp,
     Search,
     BarChart3,
-    GraduationCap
+    GraduationCap,
+    Bot
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
@@ -15,6 +16,7 @@ const navigation = [
     { name: "Arbitrage", href: "/arbitrage", icon: TrendingUp },
     { name: "Markets", href: "/markets", icon: Search },
     { name: "Bet Tracker", href: "/bet-tracker", icon: BarChart3 },
+    { name: "Agents", href: "/agents", icon: Bot },
 ];
 
 export function Sidebar() {
