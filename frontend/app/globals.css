@@ -89,12 +89,10 @@ body {
   background-size: 1000px 100%;
 }
 
-/* ── Landing page critical styles (prevents FOUC) ── */
-.landing-page {
+/* ── Landing page ── */
+.lp {
+  background: #ffffff;
+  color: #0a2540;
   min-height: 100vh;
-  background: linear-gradient(180deg, #0a0f1a 0%, #0d1321 50%, #111827 100%);
-  color: #fff;
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  position: relative;
   overflow-x: hidden;
 }
