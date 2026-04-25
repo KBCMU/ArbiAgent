@@ -4,3 +4,5 @@ pub mod dome_poller;
 pub mod kalshi_ws;
 pub mod polymarket_ws;
 pub mod prediction_api;
+pub mod vegas_matcher;
+pub mod vegas_poller;

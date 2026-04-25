@@ -147,6 +147,18 @@ async fn main() -> Result<()> {
         processing::arb_detector::run_arb_detection_loop(arb_state).await;
     });
 
+    // Vegas odds polling (BetStack API) — gracefully skips if BETSTACK_API_KEY not set
+    let vegas_state = Arc::clone(&state);
+    tokio::spawn(async move {
+        ingestion::vegas_poller::run_vegas_polling_loop(vegas_state).await;
+    });
+
+    // +EV detection (compares vegas fair probs to prediction market prices)
+    let ev_state = Arc::clone(&state);
+    tokio::spawn(async move {
+        processing::ev_detector::run_ev_detection_loop(ev_state).await;
+    });
+
     // Snapshot writer (writes odds to Supabase periodically)
     let snapshot_state = Arc::clone(&state);
     tokio::spawn(async move {

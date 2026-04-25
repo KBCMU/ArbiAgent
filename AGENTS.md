@@ -17,17 +17,17 @@ You operate within a 3-layer architecture that separates concerns to maximize re
 \- You're the glue between intent and execution. E.g you don't try scraping websites yourself—you read \`directives/scrape\_website.md\` and come up with inputs/outputs and then run \`execution/scrape\_single\_site.py\`
 
 \*\*Layer 3: Execution (Doing the work)\*\*  
-\- Deterministic Python scripts in \`execution/\`  
-\- Environment variables, api tokens, etc are stored in \`.env\`  
-\- Handle API calls, data processing, file operations, database interactions  
-\- Reliable, testable, fast. Use scripts instead of manual work. Commented well.
+\- Deterministic code: primarily \`backend-rust/\` (Axum API, ingestion, processing, storage) and \`frontend/\` (Next.js)  
+\- Environment variables and API tokens live in \`.env\`  
+\- Reliable, testable; prefer extending existing modules over ad-hoc one-offs  
+\- This repo does not use a top-level \`execution/\` Python folder
 
 \*\*Why this works:\*\* if you do everything yourself, errors compound. 90% accuracy per step \= 59% success over 5 steps. The solution is push complexity into deterministic code. That way you just focus on decision-making.
 
 \#\# Operating Principles
 
 \*\*1. Check for tools first\*\*  
-Before writing a script, check \`execution/\` per your directive. Only create new scripts if none exist.
+Before adding new code, check existing \`backend-rust/src/\` and \`frontend/\` patterns. Only add new modules or scripts when nothing fits.
 
 \*\*2. Self-anneal when things break\*\*  
 \- Read error message and stack trace  
@@ -54,17 +54,17 @@ Errors are learning opportunities. When something breaks:
 \- \*\*Intermediates\*\*: Temporary files needed during processing
 
 \*\*Directory structure:\*\*  
-\- \`.tmp/\` \- All intermediate files (dossiers, scraped data, temp exports). Never commit, always regenerated.  
-\- \`execution/\` \- Python scripts (the deterministic tools)  
-\- \`directives/\` \- SOPs in Markdown (the instruction set)  
-\- \`.env\` \- Environment variables and API keys  
-\- \`credentials.json\`, \`token.json\` \- Google OAuth credentials (required files, in \`.gitignore\`)
+\- \`.tmp/\` \- Optional intermediate files; never commit if used.  
+\- \`backend-rust/\` \- Rust backend (API, ingestion, arb detection, Supabase)  
+\- \`frontend/\` \- Next.js UI  
+\- \`directives/\` \- SOPs in Markdown (agent instruction set)  
+\- \`.env\` \- Environment variables and API keys
 
 \*\*Key principle:\*\* Local files are only for processing. Deliverables live in cloud services (Google Sheets, Slides, etc.) where the user can access them. Everything in \`.tmp/\` can be deleted and regenerated.
 
 \#\# Summary
 
-You sit between human intent (directives) and deterministic execution (Python scripts). Read instructions, make decisions, call tools, handle errors, continuously improve the system.
+You sit between human intent (directives) and deterministic execution (Rust/TypeScript in this repo). Read instructions, make decisions, call tools, handle errors, continuously improve the system.
 
 Be pragmatic. Be reliable. Self-anneal.
 
@@ -122,3 +122,4 @@ Be pragmatic. Be reliable. Self-anneal.
 # LEARNED
 (Claude fills this in over time)
 
+**Project architecture and stack:** see `CLAUDE.md` (sections under `<!-- GSD:project-start -->`). Primary data path is the external Prediction API (`ENABLE_PREDICTION_API`); in-repo matching and Dome are legacy when that flag is off.

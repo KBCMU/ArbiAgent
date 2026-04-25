@@ -96,6 +96,26 @@ interface RustArbListResponse {
     total: number;
 }
 
+/** +EV opportunity from the /api/v2/ev-opportunities endpoint. */
+export interface EvOpportunity {
+    canonical_event_id: string;
+    event_title: string;
+    sport: string;
+    outcome: string;
+    market_platform: string;
+    market_price: number;
+    vegas_fair_prob: number;
+    edge_pct: number;
+    consensus_moneyline: number;
+    kelly_fraction: number | null;
+    detected_at: string;
+}
+
+interface RustEvListResponse {
+    opportunities: EvOpportunity[];
+    total: number;
+}
+
 // ─── Config ─────────────────────────────────────────────────────────
 
 const API_BASE_URL =
@@ -203,6 +223,25 @@ export async function fetchEventDetail(
     if ("error" in data) return null;
 
     return transformEvent(data);
+}
+
+export async function fetchEvOpportunities(params?: {
+    sport?: string;
+    min_edge?: number;
+    limit?: number;
+}): Promise<EvOpportunity[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.sport) queryParams.append("sport", params.sport);
+    if (params?.min_edge) queryParams.append("min_edge", params.min_edge.toString());
+    if (params?.limit) queryParams.append("limit", params.limit.toString());
+
+    const response = await fetch(
+        `${API_BASE_URL}/api/v2/ev-opportunities?${queryParams}`,
+    );
+    if (!response.ok) return [];
+
+    const data: RustEvListResponse = await response.json();
+    return data.opportunities ?? [];
 }
 
 export async function fetchArbHistory(params?: {

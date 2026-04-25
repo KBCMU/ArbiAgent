@@ -12,6 +12,7 @@ use crate::models::event::{is_event_past, is_event_settled_full, CanonicalEvent,
 use crate::models::platform::{
     ArbOpportunityResponse, EventResponse, OutcomePriceResponse, PlatformOddsResponse,
 };
+use crate::models::vegas::EvOpportunity;
 use crate::AppState;
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -25,6 +26,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v2/arbitrage/history", get(arb_history))
         .route("/api/v2/arbitrage/stats", get(arb_stats))
         .route("/api/v2/matching/stats", get(matching_stats))
+        .route("/api/v2/ev-opportunities", get(list_ev_opportunities))
         .route("/api/v2/sports/{sport}/today", get(sport_today))
 }
 
@@ -44,6 +46,8 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
         "tracked_events": state.cache.event_count(),
         "dual_platform_events": state.cache.dual_platform_count(),
         "active_arbs": state.cache.get_all_active_arbs().len(),
+        "active_ev": state.cache.get_all_active_ev().len(),
+        "vegas_odds_count": state.cache.vegas_odds.len(),
     }))
 }
 
@@ -205,6 +209,53 @@ async fn list_arbitrage(State(state): State<Arc<AppState>>) -> Json<serde_json::
     Json(serde_json::json!({
         "opportunities": arbs,
         "total": arbs.len(),
+    }))
+}
+
+#[derive(Deserialize)]
+struct EvOpportunitiesParams {
+    sport: Option<String>,
+    min_edge: Option<f64>,
+    limit: Option<usize>,
+}
+
+async fn list_ev_opportunities(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<EvOpportunitiesParams>,
+) -> Json<serde_json::Value> {
+    let min_edge = params.min_edge.unwrap_or(0.0);
+    let limit = params.limit.unwrap_or(100);
+
+    let mut opps: Vec<EvOpportunity> = state
+        .cache
+        .get_all_active_ev()
+        .into_iter()
+        .filter(|opp| {
+            if is_event_past(&opp.canonical_event_id) {
+                return false;
+            }
+            if opp.edge_pct < min_edge {
+                return false;
+            }
+            if let Some(ref sport) = params.sport {
+                if opp.sport != *sport {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+
+    opps.sort_by(|a, b| {
+        b.edge_pct
+            .partial_cmp(&a.edge_pct)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    opps.truncate(limit);
+
+    Json(serde_json::json!({
+        "opportunities": opps,
+        "total": opps.len(),
     }))
 }
 

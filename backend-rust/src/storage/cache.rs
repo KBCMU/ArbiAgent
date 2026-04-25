@@ -8,6 +8,7 @@ use tracing::debug;
 use crate::models::{
     arb::ArbitrageOpportunity,
     event::{is_event_past, CanonicalEvent, EventOdds, OutcomePrice},
+    vegas::{EvOpportunity, VegasOdds},
 };
 
 /// Snapshot of the last native-matching cycle, exposed via `/api/v2/matching/stats`.
@@ -42,6 +43,10 @@ pub struct StateCache {
     pub odds: DashMap<String, EventOdds>,
     /// Active arbitrage opportunities keyed by event ID.
     pub active_arbs: DashMap<String, Vec<ArbitrageOpportunity>>,
+    /// Vegas/sportsbook consensus odds keyed by canonical event ID.
+    pub vegas_odds: DashMap<String, VegasOdds>,
+    /// Active +EV opportunities keyed by canonical event ID.
+    pub active_ev: DashMap<String, Vec<EvOpportunity>>,
     /// Latest matching cycle statistics (updated every discovery interval).
     pub matching_stats: RwLock<Option<MatchingStats>>,
 }
@@ -52,6 +57,8 @@ impl StateCache {
             events: DashMap::new(),
             odds: DashMap::new(),
             active_arbs: DashMap::new(),
+            vegas_odds: DashMap::new(),
+            active_ev: DashMap::new(),
             matching_stats: RwLock::new(None),
         }
     }
@@ -185,6 +192,28 @@ impl StateCache {
             .collect()
     }
 
+    /// Store vegas odds for a canonical event.
+    pub fn set_vegas_odds(&self, event_id: &str, odds: VegasOdds) {
+        self.vegas_odds.insert(event_id.to_string(), odds);
+    }
+
+    /// Store active +EV opportunities for an event.
+    pub fn set_active_ev(&self, event_id: &str, opps: Vec<EvOpportunity>) {
+        if opps.is_empty() {
+            self.active_ev.remove(event_id);
+        } else {
+            self.active_ev.insert(event_id.to_string(), opps);
+        }
+    }
+
+    /// Get all active +EV opportunities across all events.
+    pub fn get_all_active_ev(&self) -> Vec<EvOpportunity> {
+        self.active_ev
+            .iter()
+            .flat_map(|entry| entry.value().clone())
+            .collect()
+    }
+
     /// Get count of tracked events.
     pub fn event_count(&self) -> usize {
         self.events.len()
@@ -239,6 +268,8 @@ impl StateCache {
             self.events.remove(id);
             self.odds.remove(id);
             self.active_arbs.remove(id);
+            self.vegas_odds.remove(id);
+            self.active_ev.remove(id);
             evicted += 1;
         }
 
