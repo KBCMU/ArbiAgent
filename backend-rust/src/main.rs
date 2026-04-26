@@ -159,11 +159,29 @@ async fn main() -> Result<()> {
         processing::ev_detector::run_ev_detection_loop(ev_state).await;
     });
 
-    // Snapshot writer (writes odds to Supabase periodically)
-    let snapshot_state = Arc::clone(&state);
-    tokio::spawn(async move {
-        storage::supabase::run_snapshot_writer(snapshot_state).await;
-    });
+    // Snapshot writer — main source of `odds_snapshots` row growth. Disable via ENABLE_ODDS_DB_SNAPSHOTS=false to save space.
+    if config.enable_odds_db_snapshots {
+        let snapshot_state = Arc::clone(&state);
+        tokio::spawn(async move {
+            storage::supabase::run_snapshot_writer(snapshot_state).await;
+        });
+        info!(
+            "📸 Odds DB snapshots: ON (interval {}s — tune SNAPSHOT_WRITE_INTERVAL_SECS to reduce write volume)",
+            config.snapshot_write_interval_secs
+        );
+    } else {
+        info!("📸 Odds DB snapshots: OFF (ENABLE_ODDS_DB_SNAPSHOTS=false — in-memory only for odds)");
+    }
+
+    // Prune app tables on a schedule (does not touch Supabase auth schema)
+    if !config.database_url.is_empty()
+        && (config.odds_snapshot_retention_days > 0 || config.arb_opportunity_retention_days > 0)
+    {
+        let retention_state = Arc::clone(&state);
+        tokio::spawn(async move {
+            storage::supabase::run_db_retention_loop(retention_state).await;
+        });
+    }
 
     // Cache eviction — periodically removes stale/settled events to bound memory
     let eviction_state = Arc::clone(&state);

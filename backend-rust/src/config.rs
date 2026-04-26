@@ -21,6 +21,17 @@ pub struct AppConfig {
     pub price_refresh_interval_secs: u64,
     pub snapshot_write_interval_secs: u64,
 
+    /// When true, `run_snapshot_writer` persists odds rows to `odds_snapshots` (main DB growth source).
+    /// Set to false to keep only in-memory odds and rely on retention for existing rows.
+    pub enable_odds_db_snapshots: bool,
+
+    /// Delete `odds_snapshots` older than this many days (0 = never delete via retention task).
+    pub odds_snapshot_retention_days: u32,
+    /// Delete `arbitrage_opportunities` older than this many days (0 = never delete).
+    pub arb_opportunity_retention_days: u32,
+    /// How often to run the retention DELETE job.
+    pub db_retention_sweep_interval_secs: u64,
+
     // Arbitrage thresholds
     pub arb_min_margin_pct: f64,
     pub arb_min_profit_usd: f64,
@@ -122,6 +133,24 @@ impl AppConfig {
                 .unwrap_or_else(|_| "60".to_string())
                 .parse()
                 .unwrap_or(60),
+
+            enable_odds_db_snapshots: std::env::var("ENABLE_ODDS_DB_SNAPSHOTS")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .unwrap_or(true),
+            // Default 14d keeps chart history short; raise if you need longer history in DB.
+            odds_snapshot_retention_days: std::env::var("ODDS_SNAPSHOT_RETENTION_DAYS")
+                .unwrap_or_else(|_| "14".to_string())
+                .parse()
+                .unwrap_or(14),
+            arb_opportunity_retention_days: std::env::var("ARB_OPPORTUNITY_RETENTION_DAYS")
+                .unwrap_or_else(|_| "90".to_string())
+                .parse()
+                .unwrap_or(90),
+            db_retention_sweep_interval_secs: std::env::var("DB_RETENTION_SWEEP_INTERVAL_SECS")
+                .unwrap_or_else(|_| "21600".to_string())
+                .parse()
+                .unwrap_or(21_600),
 
             arb_min_margin_pct: std::env::var("ARB_MIN_MARGIN_PCT")
                 .unwrap_or_else(|_| "1.0".to_string())

@@ -297,6 +297,84 @@ impl SupabaseClient {
 
         Ok(row.map(|r| r.0).unwrap_or(serde_json::json!({})))
     }
+
+    /// Deletes odds snapshot rows older than the cutoff. Does not touch `auth` or other schemas.
+    pub async fn delete_odds_snapshots_older_than_days(&self, days: u32) -> Result<u64> {
+        let r = sqlx::query(
+            r#"
+            DELETE FROM odds_snapshots
+            WHERE recorded_at < NOW() - ($1::int * INTERVAL '1 day')
+            "#,
+        )
+        .bind(days as i32)
+        .execute(&self.pool)
+        .await?;
+        Ok(r.rows_affected())
+    }
+
+    /// Deletes arbitrage opportunity rows older than the cutoff.
+    pub async fn delete_arb_opportunities_older_than_days(&self, days: u32) -> Result<u64> {
+        let r = sqlx::query(
+            r#"
+            DELETE FROM arbitrage_opportunities
+            WHERE detected_at < NOW() - ($1::int * INTERVAL '1 day')
+            "#,
+        )
+        .bind(days as i32)
+        .execute(&self.pool)
+        .await?;
+        Ok(r.rows_affected())
+    }
+}
+
+/// Periodically prunes app tables in Supabase to stay under size limits. Never touches `auth.*`.
+pub async fn run_db_retention_loop(state: Arc<AppState>) {
+    if state.config.database_url.is_empty() {
+        warn!("⏭️  DB retention: skipped (no DATABASE_URL)");
+        return;
+    }
+
+    let interval = tokio::time::Duration::from_secs(state.config.db_retention_sweep_interval_secs);
+    let odds_days = state.config.odds_snapshot_retention_days;
+    let arb_days = state.config.arb_opportunity_retention_days;
+
+    if odds_days == 0 && arb_days == 0 {
+        info!("⏭️  DB retention: disabled (both retention days are 0)");
+        return;
+    }
+
+    info!(
+        "🧹 DB retention: every {}s — odds snapshots > {}d, arbs > {}d (first run now)",
+        state.config.db_retention_sweep_interval_secs, odds_days, arb_days
+    );
+
+    loop {
+        if odds_days > 0 {
+            match state
+                .db
+                .delete_odds_snapshots_older_than_days(odds_days)
+                .await
+            {
+                Ok(n) if n > 0 => info!("🧹 Deleted {} old odds_snapshot rows", n),
+                Ok(_) => {}
+                Err(e) => error!("DB retention (odds_snapshots): {}", e),
+            }
+        }
+
+        if arb_days > 0 {
+            match state
+                .db
+                .delete_arb_opportunities_older_than_days(arb_days)
+                .await
+            {
+                Ok(n) if n > 0 => info!("🧹 Deleted {} old arbitrage_opportunities rows", n),
+                Ok(_) => {}
+                Err(e) => error!("DB retention (arbitrage_opportunities): {}", e),
+            }
+        }
+
+        tokio::time::sleep(interval).await;
+    }
 }
 
 /// Periodically writes odds snapshots from the in-memory cache to Supabase.
