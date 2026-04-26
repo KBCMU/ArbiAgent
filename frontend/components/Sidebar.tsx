@@ -14,9 +14,9 @@ import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
 
 const navigation = [
+    { name: "Markets", href: "/markets", icon: Search },
     { name: "Arbitrage", href: "/arbitrage", icon: TrendingUp },
     { name: "+EV Trades", href: "/ev-trades", icon: Sparkles },
-    { name: "Markets", href: "/markets", icon: Search },
     { name: "Bet Tracker", href: "/bet-tracker", icon: BarChart3 },
     { name: "Agents", href: "/agents", icon: Bot },
 ];
