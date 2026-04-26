@@ -13,44 +13,73 @@ use crate::AppState;
 use super::vegas_matcher;
 
 const BETSTACK_API_BASE: &str = "https://api.betstack.dev/api/v1";
-const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
-const POLL_INTERVAL_SECS: u64 = 60;
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+const POLL_INTERVAL_SECS: u64 = 65; // slightly above the 60s rate limit
 
-/// Maps our Sport enum to BetStack league identifiers.
-fn sport_to_betstack_league(sport: &Sport) -> Option<&'static str> {
-    match sport {
-        Sport::Nfl => Some("nfl"),
-        Sport::Nba => Some("nba"),
-        Sport::Mlb => Some("mlb"),
-        Sport::Nhl => Some("nhl"),
-        Sport::Cfb => Some("cfb"),
-        Sport::Cbb => Some("cbb"),
-        Sport::Ufc => Some("ufc"),
+/// Maps BetStack league key to our Sport enum.
+fn league_key_to_sport(key: &str) -> Option<Sport> {
+    match key {
+        "americanfootball_nfl" => Some(Sport::Nfl),
+        "basketball_nba" => Some(Sport::Nba),
+        "baseball_mlb" => Some(Sport::Mlb),
+        "icehockey_nhl" => Some(Sport::Nhl),
+        "americanfootball_ncaaf" => Some(Sport::Cfb),
+        "basketball_ncaab" => Some(Sport::Cbb),
         _ => None,
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
-pub struct BetStackEvent {
-    pub id: Option<String>,
-    pub home_team: Option<String>,
-    pub away_team: Option<String>,
-    pub sport: Option<String>,
-    pub league: Option<String>,
-    pub commence_time: Option<String>,
-    pub money_line_home: Option<f64>,
-    pub money_line_away: Option<f64>,
-    pub home_spread: Option<f64>,
-    pub away_spread: Option<f64>,
-    pub total: Option<f64>,
-    pub bookmaker_count: Option<usize>,
+pub struct BetStackLineLeague {
+    pub key: Option<String>,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct BetStackResponse {
-    #[serde(default)]
-    events: Vec<BetStackEvent>,
+pub struct BetStackLineEvent {
+    pub id: Option<i64>,
+    pub commence_time: Option<String>,
+    pub home_team: Option<String>,
+    pub away_team: Option<String>,
+    pub league: Option<BetStackLineLeague>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BetStackMoneyline {
+    pub home: Option<String>,
+    pub away: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+pub struct BetStackLineEntry {
+    pub id: Option<i64>,
+    pub event_id: Option<i64>,
+    pub event: Option<BetStackLineEvent>,
+    pub moneyline: Option<BetStackMoneyline>,
+    pub last_updated: Option<String>,
+    pub source: Option<String>,
+}
+
+impl BetStackLineEntry {
+    pub fn home_team_name(&self) -> Option<&str> {
+        self.event.as_ref()?.home_team.as_deref()
+    }
+    pub fn away_team_name(&self) -> Option<&str> {
+        self.event.as_ref()?.away_team.as_deref()
+    }
+    pub fn league_key(&self) -> Option<&str> {
+        self.event.as_ref()?.league.as_ref()?.key.as_deref()
+    }
+    pub fn commence_time(&self) -> Option<&str> {
+        self.event.as_ref()?.commence_time.as_deref()
+    }
+    pub fn ml_home(&self) -> Option<f64> {
+        self.moneyline.as_ref()?.home.as_ref()?.parse::<f64>().ok()
+    }
+    pub fn ml_away(&self) -> Option<f64> {
+        self.moneyline.as_ref()?.away.as_ref()?.parse::<f64>().ok()
+    }
 }
 
 /// Convert American moneyline to implied probability.
@@ -74,18 +103,16 @@ pub fn devig_multiplicative(prob_a: f64, prob_b: f64) -> (f64, f64) {
     (prob_a / total, prob_b / total)
 }
 
-/// Convert a BetStack event into VegasOdds (not yet matched to a canonical event).
-pub fn betstack_event_to_vegas_odds(event: &BetStackEvent) -> Option<VegasOdds> {
-    let ml_home = event.money_line_home?;
-    let ml_away = event.money_line_away?;
-    let home = event.home_team.as_deref()?;
-    let away = event.away_team.as_deref()?;
+/// Convert a BetStack line entry into VegasOdds (not yet matched to a canonical event).
+pub fn line_entry_to_vegas_odds(entry: &BetStackLineEntry) -> Option<VegasOdds> {
+    let ml_home = entry.ml_home()?;
+    let ml_away = entry.ml_away()?;
+    let home = entry.home_team_name()?;
+    let away = entry.away_team_name()?;
 
     let implied_home = moneyline_to_implied_prob(ml_home);
     let implied_away = moneyline_to_implied_prob(ml_away);
     let (fair_home, fair_away) = devig_multiplicative(implied_home, implied_away);
-
-    let num_books = event.bookmaker_count.unwrap_or(1);
 
     let mut outcomes = HashMap::new();
     outcomes.insert(
@@ -94,7 +121,7 @@ pub fn betstack_event_to_vegas_odds(event: &BetStackEvent) -> Option<VegasOdds> 
             consensus_moneyline: ml_home,
             implied_prob: implied_home,
             fair_prob: fair_home,
-            num_books,
+            num_books: 1,
         },
     );
     outcomes.insert(
@@ -103,7 +130,7 @@ pub fn betstack_event_to_vegas_odds(event: &BetStackEvent) -> Option<VegasOdds> 
             consensus_moneyline: ml_away,
             implied_prob: implied_away,
             fair_prob: fair_away,
-            num_books,
+            num_books: 1,
         },
     );
 
@@ -114,7 +141,8 @@ pub fn betstack_event_to_vegas_odds(event: &BetStackEvent) -> Option<VegasOdds> 
     })
 }
 
-/// Background loop: polls BetStack API for sportsbook consensus odds.
+/// Background loop: polls BetStack /lines endpoint for consensus odds.
+/// A single call returns moneylines for all leagues, respecting the 60s rate limit.
 pub async fn run_vegas_polling_loop(state: Arc<AppState>) {
     let api_key = std::env::var("BETSTACK_API_KEY").unwrap_or_default();
     if api_key.is_empty() {
@@ -134,52 +162,51 @@ pub async fn run_vegas_polling_loop(state: Arc<AppState>) {
     info!("🎰 Vegas odds poller started (interval: {}s)", POLL_INTERVAL_SECS);
 
     loop {
-        let mut total_events = 0usize;
-        let mut matched = 0usize;
+        match fetch_all_lines(&client, &api_key).await {
+            Ok(lines) => {
+                let total = lines.len();
+                let mut matched = 0usize;
+                let mut with_ml = 0usize;
+                let mut by_league: HashMap<String, usize> = HashMap::new();
 
-        for sport in Sport::sports_for_discovery() {
-            let league = match sport_to_betstack_league(sport) {
-                Some(l) => l,
-                None => continue,
-            };
+                for line in &lines {
+                    let league_key = line.league_key().unwrap_or("unknown");
+                    let sport = match league_key_to_sport(league_key) {
+                        Some(s) => s,
+                        None => continue,
+                    };
 
-            match fetch_betstack_events(&client, &api_key, league).await {
-                Ok(events) => {
-                    total_events += events.len();
-                    for bs_event in &events {
-                        if let Some(vegas_odds) = betstack_event_to_vegas_odds(bs_event) {
-                            if vegas_matcher::match_and_store(&state, bs_event, vegas_odds, sport) {
-                                matched += 1;
-                            }
+                    if let Some(vegas_odds) = line_entry_to_vegas_odds(line) {
+                        with_ml += 1;
+                        if vegas_matcher::match_and_store_from_line(&state, line, vegas_odds, &sport) {
+                            matched += 1;
+                            *by_league.entry(league_key.to_string()).or_default() += 1;
                         }
                     }
                 }
-                Err(e) => {
-                    warn!("BetStack fetch failed for {}: {}", league, e);
+
+                info!(
+                    "🎰 Vegas poll: {} lines fetched, {} with moneylines, {} matched to canonical events",
+                    total, with_ml, matched
+                );
+                for (league, count) in &by_league {
+                    info!("   └─ {}: {} matched", league, count);
                 }
             }
-
-            // Respect rate limits between league requests
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-        }
-
-        if total_events > 0 {
-            info!(
-                "🎰 Vegas poll: {} BetStack events fetched, {} matched to canonical events",
-                total_events, matched
-            );
+            Err(e) => {
+                warn!("BetStack /lines fetch failed: {}", e);
+            }
         }
 
         tokio::time::sleep(interval).await;
     }
 }
 
-async fn fetch_betstack_events(
+async fn fetch_all_lines(
     client: &Client,
     api_key: &str,
-    league: &str,
-) -> anyhow::Result<Vec<BetStackEvent>> {
-    let url = format!("{}/events?league={}", BETSTACK_API_BASE, league);
+) -> anyhow::Result<Vec<BetStackLineEntry>> {
+    let url = format!("{}/lines", BETSTACK_API_BASE);
     let resp = client
         .get(&url)
         .header("X-API-Key", api_key)
@@ -190,15 +217,14 @@ async fn fetch_betstack_events(
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
         anyhow::bail!(
-            "BetStack API returned {} for league {}: {}",
+            "BetStack API returned {}: {}",
             status,
-            league,
-            &body[..body.len().min(200)]
+            &body[..body.len().min(300)]
         );
     }
 
-    let data: BetStackResponse = resp.json().await?;
-    Ok(data.events)
+    let lines: Vec<BetStackLineEntry> = resp.json().await?;
+    Ok(lines)
 }
 
 #[cfg(test)]
@@ -228,5 +254,14 @@ mod tests {
         let (fair_a, fair_b) = devig_multiplicative(0.6, 0.5);
         let total = fair_a + fair_b;
         assert!((total - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_league_key_mapping() {
+        assert_eq!(league_key_to_sport("basketball_nba"), Some(Sport::Nba));
+        assert_eq!(league_key_to_sport("americanfootball_nfl"), Some(Sport::Nfl));
+        assert_eq!(league_key_to_sport("baseball_mlb"), Some(Sport::Mlb));
+        assert_eq!(league_key_to_sport("icehockey_nhl"), Some(Sport::Nhl));
+        assert_eq!(league_key_to_sport("soccer_epl"), None);
     }
 }

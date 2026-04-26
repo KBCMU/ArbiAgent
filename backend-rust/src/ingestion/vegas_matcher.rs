@@ -3,23 +3,23 @@ use crate::models::event::{CanonicalEvent, Sport};
 use crate::models::vegas::VegasOdds;
 use crate::AppState;
 
-use super::vegas_poller::BetStackEvent;
+use super::vegas_poller::BetStackLineEntry;
 
-/// Attempt to match a BetStack event to a canonical event in the cache
+/// Attempt to match a BetStack line entry to a canonical event in the cache
 /// and store the resulting VegasOdds if a match is found.
 ///
 /// Returns `true` if the event was matched and stored.
-pub fn match_and_store(
+pub fn match_and_store_from_line(
     state: &AppState,
-    bs_event: &BetStackEvent,
+    line: &BetStackLineEntry,
     mut vegas_odds: VegasOdds,
     sport: &Sport,
 ) -> bool {
-    let home = match bs_event.home_team.as_deref() {
+    let home = match line.home_team_name() {
         Some(h) if !h.is_empty() => h,
         _ => return false,
     };
-    let away = match bs_event.away_team.as_deref() {
+    let away = match line.away_team_name() {
         Some(a) if !a.is_empty() => a,
         _ => return false,
     };
@@ -27,10 +27,8 @@ pub fn match_and_store(
     let home_abbr = lookup_team(home, Some(*sport)).unwrap_or_else(|| normalize_fallback(home));
     let away_abbr = lookup_team(away, Some(*sport)).unwrap_or_else(|| normalize_fallback(away));
 
-    // Parse BetStack commence_time date if available
-    let bs_date = bs_event
-        .commence_time
-        .as_deref()
+    let bs_date = line
+        .commence_time()
         .and_then(|t| t.get(..10))
         .unwrap_or("");
 
@@ -53,7 +51,6 @@ pub fn match_and_store(
     if let Some((event_id, _score)) = best_match {
         vegas_odds.canonical_event_id = event_id.clone();
 
-        // Remap outcome keys from BetStack team names to canonical outcome names
         if let Some(event_ref) = state.cache.events.get(&event_id) {
             remap_outcome_keys(&mut vegas_odds, &event_ref, &home_abbr, &away_abbr);
         }
@@ -66,9 +63,6 @@ pub fn match_and_store(
 }
 
 /// Compute a match score between a BetStack event and a canonical event.
-///
-/// Checks that both team abbreviations are present in the canonical event ID
-/// and optionally that the date matches.
 fn compute_match_score(
     event: &CanonicalEvent,
     home_abbr: &str,
@@ -88,11 +82,9 @@ fn compute_match_score(
 
     let mut score = 70.0;
 
-    // Date match bonus
     if !bs_date.is_empty() && id_lower.contains(bs_date) {
         score += 30.0;
     } else if !bs_date.is_empty() {
-        // Allow 1-day tolerance for timezone differences
         if let Ok(bs_naive) = chrono::NaiveDate::parse_from_str(bs_date, "%Y-%m-%d") {
             let id_date = extract_date_from_id(&event.id);
             if let Some(id_naive) = id_date {
@@ -131,7 +123,6 @@ fn remap_outcome_keys(
     home_abbr: &str,
     away_abbr: &str,
 ) {
-    // Collect the existing prediction market outcome names from the event
     let labels = &event.platform_ids.polymarket_outcome_labels;
     if labels.len() != 2 {
         return;
@@ -140,7 +131,6 @@ fn remap_outcome_keys(
     let label_a = &labels[0];
     let label_b = &labels[1];
 
-    // Figure out which label corresponds to home and which to away
     let label_a_lower = label_a.to_lowercase();
     let label_b_lower = label_b.to_lowercase();
     let home_lower = home_abbr.to_lowercase();
@@ -156,15 +146,6 @@ fn remap_outcome_keys(
         return;
     };
 
-    // Get original BetStack team names (keys in the outcomes map)
-    let original_keys: Vec<String> = vegas_odds.outcomes.keys().cloned().collect();
-    if original_keys.len() != 2 {
-        return;
-    }
-
-    let key_0_lower = original_keys[0].to_lowercase();
-    let key_0_is_home = key_0_lower.contains(&home_lower) || home_lower.contains(&key_0_lower);
-
     let mut new_outcomes = std::collections::HashMap::new();
     for (key, val) in vegas_odds.outcomes.drain() {
         let key_lower = key.to_lowercase();
@@ -176,11 +157,10 @@ fn remap_outcome_keys(
         };
         new_outcomes.insert(new_key, val);
     }
-    let _ = key_0_is_home; // used indirectly through the loop
     vegas_odds.outcomes = new_outcomes;
 }
 
-/// Fallback normalization: lowercase + take first 3 characters.
+/// Fallback normalization: lowercase + take last word.
 fn normalize_fallback(name: &str) -> String {
     let cleaned: String = name
         .chars()
@@ -188,8 +168,8 @@ fn normalize_fallback(name: &str) -> String {
         .collect();
     let parts: Vec<&str> = cleaned.split_whitespace().collect();
     if let Some(last) = parts.last() {
-        last.to_lowercase().chars().take(3).collect()
+        last.to_lowercase()
     } else {
-        cleaned.to_lowercase().chars().take(3).collect()
+        cleaned.to_lowercase()
     }
 }
