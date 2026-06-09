@@ -8,7 +8,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::models::event::{is_event_past, is_event_settled_full, CanonicalEvent, EventOdds};
+use crate::models::event::{is_canonical_event_past, is_event_past, is_event_settled_full, CanonicalEvent, EventOdds};
 use crate::models::platform::{
     ArbOpportunityResponse, EventResponse, OutcomePriceResponse, PlatformOddsResponse,
 };
@@ -48,6 +48,8 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
         "active_arbs": state.cache.get_all_active_arbs().len(),
         "active_ev": state.cache.get_all_active_ev().len(),
         "vegas_odds_count": state.cache.vegas_odds.len(),
+        "enable_prediction_api": state.config.enable_prediction_api,
+        "events_with_odds": state.cache.odds.len(),
     }))
 }
 
@@ -74,32 +76,17 @@ fn has_binary_outcomes(event: &CanonicalEvent, odds_opt: Option<&EventOdds>) -> 
                     return false;
                 }
             }
-
-            // Safety net: ensure rendered union is still binary even if platform
-            // keys diverge (e.g. stale relabel keys).
-            let mut rendered_outcomes = std::collections::HashSet::new();
-            if let Some(k) = odds.platform_odds.get("kalshi") {
-                for key in k.keys() {
-                    rendered_outcomes.insert(key.to_lowercase());
-                }
-            }
-            if let Some(p) = odds.platform_odds.get("polymarket") {
-                for key in p.keys() {
-                    rendered_outcomes.insert(key.to_lowercase());
-                }
-            }
-            if !rendered_outcomes.is_empty() && rendered_outcomes.len() != 2 {
-                return false;
-            }
         }
         true
     } else {
-        let outcome_count = if !event.platform_ids.kalshi_market_tickers.is_empty() {
-            event.platform_ids.kalshi_market_tickers.len()
-        } else {
-            event.platform_ids.polymarket_token_ids.len()
-        };
-        outcome_count == 2
+        if !event.platform_ids.kalshi_market_tickers.is_empty() {
+            return event.platform_ids.kalshi_market_tickers.len() == 2;
+        }
+        if !event.platform_ids.polymarket_token_ids.is_empty() {
+            return event.platform_ids.polymarket_token_ids.len() == 2;
+        }
+        // PredictionAPI: participant names stored as outcome labels, no token IDs.
+        event.platform_ids.polymarket_outcome_labels.len() == 2
     }
 }
 
@@ -129,7 +116,7 @@ async fn list_events(
                 }
             }
             // Skip events whose game date has already passed
-            if is_event_past(&event.id) {
+            if is_canonical_event_past(event) {
                 return false;
             }
             // Skip events whose markets have settled (status or price heuristic)

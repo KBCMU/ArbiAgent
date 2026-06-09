@@ -182,6 +182,19 @@ pub fn is_event_settled(odds: &EventOdds) -> bool {
     false
 }
 
+/// Whether a canonical event's game day is strictly before today (US/Eastern).
+///
+/// Prefers `game_start_time` when set (PredictionAPI / matched events). Falls back
+/// to parsing `YYYY-MM-DD` from the event ID for legacy native-matching IDs.
+pub fn is_canonical_event_past(event: &CanonicalEvent) -> bool {
+    if let Some(start) = event.game_start_time {
+        let today_eastern = Utc::now().with_timezone(&Eastern).date_naive();
+        let game_date = start.with_timezone(&Eastern).date_naive();
+        return game_date < today_eastern;
+    }
+    is_event_past(&event.id)
+}
+
 /// Check if an event's game date (embedded in its ID) has already passed.
 ///
 /// Event IDs follow the pattern `"sport-team1-team2-YYYY-MM-DD"`.

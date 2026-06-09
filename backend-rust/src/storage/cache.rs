@@ -7,7 +7,7 @@ use tracing::debug;
 
 use crate::models::{
     arb::ArbitrageOpportunity,
-    event::{is_event_past, CanonicalEvent, EventOdds, OutcomePrice},
+    event::{is_canonical_event_past, CanonicalEvent, EventOdds, OutcomePrice},
     vegas::{EvOpportunity, VegasOdds},
 };
 
@@ -243,7 +243,7 @@ impl StateCache {
             .filter(|entry| {
                 let event = entry.value();
                 // Past date
-                if is_event_past(&event.id) {
+                if is_canonical_event_past(event) {
                     return true;
                 }
                 // Settled or closed by platform lifecycle

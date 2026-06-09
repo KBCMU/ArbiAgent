@@ -68,6 +68,8 @@ pub struct AppConfig {
     pub prediction_api_url: String,
     /// Bearer token for PredictionAPI authentication.
     pub prediction_api_token: String,
+    /// Skip PredictionAPI contract prices when `last_fetched` is older than this (seconds).
+    pub prediction_api_stale_threshold_secs: i64,
 }
 
 impl AppConfig {
@@ -205,6 +207,12 @@ impl AppConfig {
                 .unwrap_or_else(|_| "https://prediction-api-kbcmu.fly.dev".to_string()),
             prediction_api_token: std::env::var("PREDICTION_API_TOKEN")
                 .unwrap_or_default(),
+            prediction_api_stale_threshold_secs: std::env::var(
+                "PREDICTION_API_STALE_THRESHOLD_SECS",
+            )
+            .unwrap_or_else(|_| "120".to_string())
+            .parse()
+            .unwrap_or(120),
         })
     }
 }

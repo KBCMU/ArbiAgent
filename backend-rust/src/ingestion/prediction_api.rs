@@ -117,15 +117,11 @@ async fn fetch_markets(
 
 // ─── Staleness check ─────────────────────────────────────────────────
 
-/// Contracts with `last_fetched` older than this threshold are skipped.
-/// PredictionAPI refreshes every ~1s; >30s indicates an upstream issue.
-const STALE_THRESHOLD_SECS: i64 = 30;
-
-fn is_stale(last_fetched: &Option<String>) -> bool {
+fn is_stale(last_fetched: &Option<String>, threshold_secs: i64) -> bool {
     let Some(ts) = last_fetched else { return false };
     let Ok(dt) = DateTime::parse_from_rfc3339(ts) else { return false };
     let age = Utc::now().signed_duration_since(dt.with_timezone(&Utc));
-    age.num_seconds() > STALE_THRESHOLD_SECS
+    age.num_seconds() > threshold_secs
 }
 
 // ─── Event discovery loop ─────────────────────────────────────────────
@@ -244,25 +240,33 @@ pub async fn run_prediction_price_loop(state: Arc<AppState>) {
         .await
         {
             Ok(markets) => {
+                let stale_threshold = state.config.prediction_api_stale_threshold_secs;
+                let markets_total = markets.len();
                 let mut updated = 0usize;
+                let mut skipped_stale = 0usize;
+                let mut skipped_missing_contracts = 0usize;
+                let mut skipped_unknown_event = 0usize;
+
                 for market in markets {
                     let Some((participant_a, participant_b)) =
                         events_map.get(&market.event_id)
                     else {
+                        skipped_unknown_event += 1;
                         continue;
                     };
                     let Some(kalshi) = market.contracts.get("kalshi") else {
+                        skipped_missing_contracts += 1;
                         continue;
                     };
                     let Some(poly) = market.contracts.get("polymarket") else {
+                        skipped_missing_contracts += 1;
                         continue;
                     };
 
-                    if is_stale(&kalshi.last_fetched) || is_stale(&poly.last_fetched) {
-                        warn!(
-                            "PredictionAPI: stale contract data for event {}, skipping",
-                            market.event_id
-                        );
+                    if is_stale(&kalshi.last_fetched, stale_threshold)
+                        || is_stale(&poly.last_fetched, stale_threshold)
+                    {
+                        skipped_stale += 1;
                         continue;
                     }
 
@@ -329,6 +333,14 @@ pub async fn run_prediction_price_loop(state: Arc<AppState>) {
                 }
                 if updated > 0 {
                     info!("📡 PredictionAPI: updated odds for {} markets", updated);
+                } else if markets_total > 0 {
+                    warn!(
+                        "PredictionAPI: 0/{} markets got odds (stale={}, no_contracts={}, unknown_event={})",
+                        markets_total,
+                        skipped_stale,
+                        skipped_missing_contracts,
+                        skipped_unknown_event,
+                    );
                 }
             }
             Err(e) => error!("PredictionAPI markets fetch failed: {}", e),

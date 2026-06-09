@@ -3,8 +3,9 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
+use std::str::FromStr;
 use tracing::{error, info, warn};
 
 use crate::config::AppConfig;
@@ -32,9 +33,14 @@ impl SupabaseClient {
         }
 
         info!("🔗 Connecting to database (lazy)...");
+        // Supabase transaction pooler (port 6543) rejects sqlx prepared statement
+        // caching — disable it to avoid "prepared statement already exists" after
+        // pause/resume or pooler reconnects.
+        let connect_options = PgConnectOptions::from_str(&config.database_url)?
+            .statement_cache_capacity(0);
         let pool = PgPoolOptions::new()
             .max_connections(5)
-            .connect_lazy(&config.database_url)?;
+            .connect_lazy_with(connect_options);
 
         Ok(Self { pool })
     }
