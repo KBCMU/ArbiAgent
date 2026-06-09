@@ -336,10 +336,41 @@ fn build_event_response(
         created_at: event.created_at.to_rfc3339(),
         status: event.status.clone(),
         match_score: event.match_score,
-        kalshi,
-        polymarket,
+        kalshi: kalshi.or_else(|| placeholder_platform_odds(event, odds)),
+        polymarket: polymarket.or_else(|| placeholder_platform_odds(event, odds)),
         arb_opportunity,
     }
+}
+
+/// When odds are not yet in cache, expose participant labels so the frontend
+/// can render rows (EventRow maps over outcome names).
+fn placeholder_platform_odds(
+    event: &CanonicalEvent,
+    odds: Option<&EventOdds>,
+) -> Option<PlatformOddsResponse> {
+    if odds.is_some_and(|o| !o.platform_odds.is_empty()) {
+        return None;
+    }
+    let labels = &event.platform_ids.polymarket_outcome_labels;
+    if labels.len() != 2 {
+        return None;
+    }
+    let outcomes: std::collections::HashMap<String, OutcomePriceResponse> = labels
+        .iter()
+        .map(|name| {
+            (
+                name.clone(),
+                OutcomePriceResponse {
+                    yes_price: 0.0,
+                    no_price: 0.0,
+                },
+            )
+        })
+        .collect();
+    Some(PlatformOddsResponse {
+        outcomes,
+        updated_at: None,
+    })
 }
 
 // ─── Phase 3: Historical / Analytics endpoints ───────────────────────

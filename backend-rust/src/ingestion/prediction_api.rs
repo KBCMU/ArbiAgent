@@ -64,12 +64,71 @@ struct PredictionMarket {
 
 #[derive(Debug, Deserialize)]
 struct PlatformContract {
+    #[serde(default)]
+    exchange: Option<String>,
     #[serde(deserialize_with = "deserialize_price")]
     outcome_a_price: f64,
     #[serde(deserialize_with = "deserialize_price")]
     outcome_b_price: f64,
     /// ISO 8601 timestamp of when this contract's price was last fetched upstream.
     last_fetched: Option<String>,
+}
+
+fn find_contract<'a>(
+    contracts: &'a HashMap<String, PlatformContract>,
+    platform: &str,
+) -> Option<&'a PlatformContract> {
+    if let Some(c) = contracts.get(platform) {
+        return Some(c);
+    }
+    contracts.iter().find_map(|(key, c)| {
+        let key_matches = key.eq_ignore_ascii_case(platform);
+        let exchange_matches = c
+            .exchange
+            .as_deref()
+            .is_some_and(|ex| ex.eq_ignore_ascii_case(platform));
+        if key_matches || exchange_matches {
+            Some(c)
+        } else {
+            None
+        }
+    })
+}
+
+fn apply_platform_odds(
+    state: &AppState,
+    event_id: &str,
+    platform: &str,
+    participant_a: &str,
+    participant_b: &str,
+    contract: &PlatformContract,
+) {
+    state.cache.update_odds(
+        event_id,
+        platform,
+        participant_a,
+        OutcomePrice {
+            yes_price: contract.outcome_a_price,
+            no_price: contract.outcome_b_price,
+            best_bid: None,
+            best_ask: None,
+            bid_size: None,
+            ask_size: None,
+        },
+    );
+    state.cache.update_odds(
+        event_id,
+        platform,
+        participant_b,
+        OutcomePrice {
+            yes_price: contract.outcome_b_price,
+            no_price: contract.outcome_a_price,
+            best_bid: None,
+            best_ask: None,
+            bid_size: None,
+            ask_size: None,
+        },
+    );
 }
 
 // ─── HTTP helpers ────────────────────────────────────────────────────
@@ -254,82 +313,54 @@ pub async fn run_prediction_price_loop(state: Arc<AppState>) {
                         skipped_unknown_event += 1;
                         continue;
                     };
-                    let Some(kalshi) = market.contracts.get("kalshi") else {
-                        skipped_missing_contracts += 1;
-                        continue;
-                    };
-                    let Some(poly) = market.contracts.get("polymarket") else {
-                        skipped_missing_contracts += 1;
-                        continue;
-                    };
 
-                    if is_stale(&kalshi.last_fetched, stale_threshold)
-                        || is_stale(&poly.last_fetched, stale_threshold)
-                    {
-                        skipped_stale += 1;
+                    if market.contracts.is_empty() {
+                        skipped_missing_contracts += 1;
                         continue;
                     }
 
                     let event_id = &market.event_id;
+                    let mut applied_any = false;
 
-                    // participant_a outcome: outcome_a_price is the YES price for A winning.
-                    // outcome_b_price is the complementary NO price (A losing).
-                    state.cache.update_odds(
-                        event_id,
-                        "kalshi",
-                        participant_a,
-                        OutcomePrice {
-                            yes_price: kalshi.outcome_a_price,
-                            no_price: kalshi.outcome_b_price,
-                            best_bid: None,
-                            best_ask: None,
-                            bid_size: None,
-                            ask_size: None,
-                        },
-                    );
-                    state.cache.update_odds(
-                        event_id,
-                        "polymarket",
-                        participant_a,
-                        OutcomePrice {
-                            yes_price: poly.outcome_a_price,
-                            no_price: poly.outcome_b_price,
-                            best_bid: None,
-                            best_ask: None,
-                            bid_size: None,
-                            ask_size: None,
-                        },
-                    );
+                    if let Some(kalshi) = find_contract(&market.contracts, "kalshi") {
+                        if is_stale(&kalshi.last_fetched, stale_threshold) {
+                            skipped_stale += 1;
+                        } else {
+                            apply_platform_odds(
+                                &state,
+                                event_id,
+                                "kalshi",
+                                participant_a,
+                                participant_b,
+                                kalshi,
+                            );
+                            applied_any = true;
+                        }
+                    }
 
-                    // participant_b outcome: prices are flipped — outcome_b_price is YES for B winning.
-                    state.cache.update_odds(
-                        event_id,
-                        "kalshi",
-                        participant_b,
-                        OutcomePrice {
-                            yes_price: kalshi.outcome_b_price,
-                            no_price: kalshi.outcome_a_price,
-                            best_bid: None,
-                            best_ask: None,
-                            bid_size: None,
-                            ask_size: None,
-                        },
-                    );
-                    state.cache.update_odds(
-                        event_id,
-                        "polymarket",
-                        participant_b,
-                        OutcomePrice {
-                            yes_price: poly.outcome_b_price,
-                            no_price: poly.outcome_a_price,
-                            best_bid: None,
-                            best_ask: None,
-                            bid_size: None,
-                            ask_size: None,
-                        },
-                    );
+                    if let Some(poly) = find_contract(&market.contracts, "polymarket") {
+                        if is_stale(&poly.last_fetched, stale_threshold) {
+                            skipped_stale += 1;
+                        } else {
+                            apply_platform_odds(
+                                &state,
+                                event_id,
+                                "polymarket",
+                                participant_a,
+                                participant_b,
+                                poly,
+                            );
+                            applied_any = true;
+                        }
+                    }
 
-                    updated += 1;
+                    if applied_any {
+                        updated += 1;
+                    } else if find_contract(&market.contracts, "kalshi").is_none()
+                        && find_contract(&market.contracts, "polymarket").is_none()
+                    {
+                        skipped_missing_contracts += 1;
+                    }
                 }
                 if updated > 0 {
                     info!("📡 PredictionAPI: updated odds for {} markets", updated);
